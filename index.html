@@ -5,42 +5,61 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mon coffre</title>
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0e5a52">
+<meta name="theme-color" content="#0c1320">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&display=swap">
 <style>
-:root{--bg:#e8edec;--card:#f7f9f8;--ink:#14201e;--mute:#5a6b68;--line:#c9d3d1;--acc:#0e5a52;--acc-ink:#fff;--bad:#a8231b;
+:root{--bg:#e8ecf1;--card:#f8fafc;--panel:#dde4ec;--ink:#13202f;--mute:#586a7e;--line:#cdd6e0;--acc:#1c3556;--acc-ink:#fff;--brass:#a06c14;--bad:#a8231b;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1716;--card:#18221f;--ink:#e6efed;--mute:#8fa39f;--line:#2b3a37;--acc:#4fc3b4;--acc-ink:#07201c;--bad:#ff8a80}}
-:root[data-theme="dark"]{--bg:#0f1716;--card:#18221f;--ink:#e6efed;--mute:#8fa39f;--line:#2b3a37;--acc:#4fc3b4;--acc-ink:#07201c;--bad:#ff8a80}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0c1320;--card:#142033;--panel:#1b2c45;--ink:#e8eef6;--mute:#8da0b8;--line:#263850;--acc:#e0b04f;--acc-ink:#1a1405;--brass:#e0b04f;--bad:#ff8a80}}
+:root[data-theme="dark"]{--bg:#0c1320;--card:#142033;--panel:#1b2c45;--ink:#e8eef6;--mute:#8da0b8;--line:#263850;--acc:#e0b04f;--acc-ink:#1a1405;--brass:#e0b04f;--bad:#ff8a80}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "IBM Plex Sans",system-ui,sans-serif}
-main{max-width:520px;margin:0 auto;padding:20px 16px 40px}
-h1{font-size:26px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
-p{margin:0 0 14px;color:var(--mute)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Sora,system-ui,sans-serif}
+main{max-width:520px;margin:0 auto;padding:20px 18px 40px}
+.hasnav main{padding-bottom:120px}
+h1{font-size:28px;font-weight:700;margin:0 0 6px;letter-spacing:-.02em;line-height:1.2}
+p{margin:0 0 16px;color:var(--mute)}
 input,select,textarea,button{font:inherit;color:inherit}
-input,select,textarea{width:100%;padding:12px;border:1.5px solid var(--line);border-radius:8px;background:var(--card);margin-bottom:10px}
-input:focus,select:focus,textarea:focus,button:focus-visible{outline:3px solid var(--acc);outline-offset:1px}
-button{border:0;border-radius:8px;padding:12px 16px;background:var(--acc);color:var(--acc-ink);font-weight:600;cursor:pointer}
+input,select,textarea{width:100%;padding:14px;border:1.5px solid var(--line);border-radius:14px;background:var(--card);margin-bottom:10px}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:3px solid var(--brass);outline-offset:1px}
+button{border:0;border-radius:14px;padding:14px 18px;background:var(--acc);color:var(--acc-ink);font-weight:600;cursor:pointer}
 button.sec{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
 button.bad{background:transparent;color:var(--bad);border:1.5px solid var(--bad)}
-button.sm{padding:6px 10px;font-size:14px}
+button.sm{padding:8px 12px;font-size:14px;border-radius:12px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .row>*{flex:0 0 auto}
-.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:8px}
-.tabs button{padding:8px 12px;font-size:14px;white-space:nowrap}
-.entry{background:var(--card);border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
-.entry b{display:block}
-.entry small{color:var(--mute)}
-.val{margin:6px 0 10px;word-break:break-word;white-space:pre-wrap;font-variant-numeric:tabular-nums}
 .pwwrap{position:relative;margin-bottom:10px}
-.pwwrap input{margin-bottom:0;padding-right:50px}
-.pwwrap .eye{position:absolute;right:4px;top:4px;bottom:4px;width:42px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;color:var(--mute);border-radius:6px}
+.pwwrap input{margin-bottom:0;padding-right:52px}
+.pwwrap .eye{position:absolute;right:4px;top:4px;bottom:4px;width:44px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;color:var(--mute);border-radius:10px}
 .err{color:var(--bad);min-height:22px;margin:0 0 8px}
 .note{font-size:14px;color:var(--mute)}
 textarea{min-height:90px}
+.entry{background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:14px}
+.dial{display:block;margin:6px auto 14px}
+.dial+h1,.dial+h1+p{text-align:center}
+.ring{transform-origin:60px 60px;transition:transform .7s cubic-bezier(.3,.8,.3,1)}
+.spin .ring,.dial.spin .ring{transform:rotate(200deg)}
+@media (prefers-reduced-motion:reduce){.ring{transition:none}}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;display:flex;justify-content:space-between;align-items:center;margin:-20px -18px 14px;padding:14px 18px;background:var(--bg)}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:-.01em}
+.ico{width:42px;height:42px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--card);color:var(--ink);border:1.5px solid var(--line);border-radius:50%}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
+.tile{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:128px;padding:16px;text-align:left;background:var(--card);color:var(--ink);border:1.5px solid var(--line);border-radius:22px;font-weight:400}
+.tile b{font-size:17px;margin-top:auto}
+.tile small{color:var(--mute);font-size:13px}
+.badge{width:44px;height:44px;border-radius:14px;background:var(--panel);color:var(--brass);display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.ent{background:var(--card);border:1.5px solid var(--line);border-radius:20px;padding:14px;margin-bottom:12px}
+.eh{display:flex;align-items:center;gap:12px}
+.eh b{font-weight:600}
+.val{margin:10px 0 12px;word-break:break-word;white-space:pre-wrap;font-variant-numeric:tabular-nums;letter-spacing:.04em}
+#nav{position:fixed;left:0;right:0;bottom:0;z-index:6;display:flex;background:var(--card);border-top:1px solid var(--line);padding:8px 6px calc(8px + env(safe-area-inset-bottom,0px))}
+.nb{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;background:transparent;color:var(--mute);font-size:12px;font-weight:600;border-radius:12px}
+.nb.on{color:var(--ink)}
+.nb.on svg{color:var(--brass)}
+.nb.fab svg{width:40px;height:40px;padding:8px;margin-top:-20px;background:var(--acc);color:var(--acc-ink);border-radius:50%;box-shadow:0 4px 14px rgba(0,0,0,.28)}
+.nb.fab.on svg{color:var(--acc-ink)}
+.hasnav #bk{display:none}
 </style>
 </head>
 <body>
@@ -146,7 +165,33 @@ function addEyes(){
   });
   if(a&&a.focus&&document.body.contains(a))a.focus();
 }
-function render(){_render();addEyes()}
+const I=p=>`<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+const CI={
+"Identité":I('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.6-1.6 1.8-2.4 3-2.4s2.4.8 3 2.4M14 10h4M14 14h3"/>'),
+"Santé":I('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.4A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>'),
+"Contacts":I('<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/>'),
+"Documents":I('<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>'),
+"Finances":I('<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/>'),
+"Notes":I('<path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h4"/>')};
+const GRID=I('<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>');
+const PLUS=I('<path d="M12 5v14M5 12h14"/>');
+const SHIELD=I('<path d="M12 3l7 3v5c0 4.6-3 8-7 10-4-2-7-5.4-7-10V6z"/><path d="M9 12l2 2 4-4"/>');
+const SAVE=I('<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14"/>');
+const LOCKI=I('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>');
+const MINI='<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="var(--brass)" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="var(--brass)"/></svg>';
+const DIAL='<svg class="dial" viewBox="0 0 120 120" width="124" height="124" aria-hidden="true"><circle cx="60" cy="60" r="57" fill="var(--panel)" stroke="var(--brass)" stroke-width="3"/><g class="ring" stroke="var(--brass)" stroke-width="2.2" stroke-linecap="round">'+Array.from({length:24},(_,k)=>`<line x1="60" y1="9" x2="60" y2="${k%6?14:20}" transform="rotate(${k*15} 60 60)"/>`).join("")+'<circle cx="60" cy="60" r="31" fill="none" stroke-width="1.5"/></g><circle cx="60" cy="60" r="9" fill="var(--brass)"/><rect x="57.5" y="62" width="5" height="14" rx="2" fill="var(--brass)"/><path d="M55 1h10l-5 9z" fill="var(--ink)"/></svg>';
+function render(){_render();addEyes();addNav()}
+function addNav(){
+  let n=document.getElementById("nav");
+  const show=key&&["list","add","backup","sec"].includes(view);
+  document.body.classList.toggle("hasnav",!!show);
+  if(!show){if(n)n.remove();return}
+  $("#app").insertAdjacentHTML("afterbegin",`<header class="bar"><span class="brand">${MINI}Mon coffre</span><button class="ico" id="lk" aria-label="Verrouiller">${LOCKI}</button></header>`);
+  $("#lk").onclick=lock;
+  if(!n){n=document.createElement("nav");n.id="nav";document.body.appendChild(n)}
+  n.innerHTML=[["list","Coffre",GRID],["sec","Sécurité",SHIELD],["add","Ajouter",PLUS],["backup","Sauvegarde",SAVE]].map(([v,l,p])=>`<button class="nb${v===view?" on":""}${v==="add"?" fab":""}" data-v="${v}" aria-label="${l}">${p}<span>${l}</span></button>`).join("");
+  n.querySelectorAll("button").forEach(b=>b.onclick=()=>{view=b.dataset.v;if(view==="list")cat="Tous";render()});
+}
 function _render(){
   const app=$("#app");
   if(!key&&view==="reset"){
@@ -213,7 +258,7 @@ function _render(){
   }
   if(!key){
     const first=!load();
-    app.innerHTML=`<h1>Mon coffre</h1>
+    app.innerHTML=`${DIAL}<h1>Mon coffre</h1>
     <p>${first?"Crée ton mot de passe maître. Il chiffre tout sur ce téléphone. Un code de récupération te sera donné juste après, au cas où tu l'oublies.":"Entre ton mot de passe maître pour ouvrir le coffre."}</p>
     <input id="pw" type="password" autocomplete="off" placeholder="Mot de passe maître">
     ${first?'<input id="pw2" type="password" autocomplete="off" placeholder="Confirme le mot de passe"><p class="note">Au moins 12 caractères. Une phrase de plusieurs mots est idéale.</p>':""}
@@ -283,21 +328,21 @@ function _render(){
     };
     return;
   }
-  const list=items.filter(i=>cat==="Tous"||i.c===cat);
-  app.innerHTML=`<div class="top"><h1>Mon coffre</h1><button class="sec sm" id="lk">Verrouiller</button></div>
-  ${msg?`<div class="err" role="alert">${esc(msg)}</div>`:""}
-  <div class="tabs">${["Tous",...CATS].map(c=>`<button class="${c===cat?"":"sec"}" data-cat="${c}">${c}</button>`).join("")}</div>
-  ${list.length?list.map(i=>`<div class="entry"><b>${esc(i.t)}</b><small>${esc(i.c)}</small>
-    <div class="val">${shown===i.id?esc(i.v):"••••••••••"}</div>
-    <div class="row"><button class="sec sm" data-show="${i.id}">${shown===i.id?"Masquer":"Afficher"}</button>
-    <button class="sec sm" data-copy="${i.id}">Copier</button>
-    <button class="bad sm" data-del="${i.id}">Supprimer</button></div></div>`).join("")
-    :`<p>Rien ici pour l'instant. Ajoute ta première information.</p>`}
-  <div class="row" style="margin-top:14px"><button id="add">Ajouter</button><button class="sec" id="bkp">Sauvegarde</button><button class="sec" id="secb">Sécurité</button></div>`;
-  $("#lk").onclick=lock;
-  $("#add").onclick=()=>{view="add";render()};
-  $("#bkp").onclick=()=>{view="backup";render()};
-  $("#secb").onclick=()=>{view="sec";render()};
+  const cnt=c=>items.filter(i=>i.c===c).length;
+  if(cat==="Tous"){
+    app.innerHTML=`<h1>Mes rubriques</h1><p>${items.length?items.length+" information"+(items.length>1?"s":"")+" protégée"+(items.length>1?"s":"")+" sur ce téléphone.":"Ton coffre est vide. Touche + pour ajouter ta première information."}</p>
+    ${msg?`<div class="err" role="alert">${esc(msg)}</div>`:""}
+    <div class="grid">${CATS.map(c=>`<button class="tile" data-cat="${c}"><span class="badge">${CI[c]}</span><b>${c}</b><small>${cnt(c)} élément${cnt(c)>1?"s":""}</small></button>`).join("")}</div>`;
+  }else{
+    const list=items.filter(i=>i.c===cat);
+    app.innerHTML=`<button class="sec sm" id="bk2">‹ Rubriques</button><h1 style="margin-top:14px">${cat}</h1>
+    ${list.length?list.map(i=>`<div class="ent"><div class="eh"><span class="badge">${CI[i.c]}</span><b>${esc(i.t)}</b></div>
+      <div class="val">${shown===i.id?esc(i.v):"••••••••••"}</div>
+      <div class="row"><button class="sec sm" data-show="${i.id}">${shown===i.id?"Masquer":"Afficher"}</button>
+      <button class="sec sm" data-copy="${i.id}">Copier</button>
+      <button class="bad sm" data-del="${i.id}">Supprimer</button></div></div>`).join(""):`<p>Rien ici pour l'instant. Touche + pour ajouter une information.</p>`}`;
+    $("#bk2").onclick=()=>{cat="Tous";render()};
+  }
   app.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{cat=b.dataset.cat;render()});
   app.querySelectorAll("[data-show]").forEach(b=>b.onclick=()=>{
     clearTimeout(timer);shown=shown===b.dataset.show?null:b.dataset.show;render();
@@ -308,10 +353,7 @@ function _render(){
     try{await navigator.clipboard.writeText(it.v);b.textContent="Copié";setTimeout(()=>navigator.clipboard.writeText("").catch(()=>{}),30000)}catch(e){b.textContent="Échec"}
   });
   app.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
-    if(b.dataset.arm!=="1"){
-      b.dataset.arm="1";b.textContent="Confirmer ?";
-      setTimeout(()=>{b.dataset.arm="";b.textContent="Supprimer"},4000);return;
-    }
+    if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Confirmer ?";setTimeout(()=>{b.dataset.arm="";b.textContent="Supprimer"},4000);return}
     items=items.filter(x=>x.id!==b.dataset.del);await save();render();
   });
 }
@@ -330,6 +372,7 @@ async function unlock(){
   if(fails>=3)await new Promise(r=>setTimeout(r,Math.min(30000,1000*2**(fails-3))));
   try{
     const r=await openBlob(load(),pw,"pw");
+    const dl=document.querySelector(".dial");if(dl){dl.classList.add("spin");await new Promise(z=>setTimeout(z,650))}
     fails=0;msg="";
     if(r.legacy){pendingCode=await setupKeys(pw,r.items);view="reccode"}
     else{dek=r.raw;key=r.k;items=r.items;meta=r.meta}
