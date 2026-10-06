@@ -228,12 +228,11 @@ async function bioEnable(){
   try{
     if(!window.PublicKeyCredential||!dek)throw 1;
     const c=await navigator.credentials.create({publicKey:{rp:{name:"Mon coffre",id:location.hostname},user:{id:rnd(16),name:"coffre",displayName:"Mon coffre"},challenge:rnd(32),pubKeyCredParams:[{type:"public-key",alg:-7},{type:"public-key",alg:-257}],authenticatorSelection:{authenticatorAttachment:"platform",userVerification:"required"},timeout:60000,extensions:{prf:{}}}});
-    if(!(c.getClientExtensionResults().prf||{}).enabled)throw 2;
     const salt=rnd(32),k=await bioGet(c.rawId,salt),iv=rnd(12);
     const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},k,dek);
     localStorage.setItem(BK,JSON.stringify({id:b64(c.rawId),s:b64(salt),i:b64(iv),d:b64(ct)}));
     setTimeout(()=>{window.bioBusy=false},1500);render();
-  }catch(e){setTimeout(()=>{window.bioBusy=false},1500);const mm=$("#bioM");if(mm)mm.textContent=e===2?"Pas pris en charge ici. Sur Android : ouvre l'appli dans Chrome, connecté à un compte Google, avec un verrouillage d'écran. Sinon, utilise le code court.":"Activation impossible ou annulée (il faut ouvrir l'appli en https)."}
+  }catch(e){setTimeout(()=>{window.bioBusy=false},1500);const mm=$("#bioM");if(mm)mm.textContent=e===0||e===2?"Pas pris en charge ici. Sur Android : ouvre l'appli dans Chrome, connecté à un compte Google, avec un verrouillage d'écran. Sinon, utilise le code court.":"Activation impossible ou annulée (il faut ouvrir l'appli en https)."}
 }
 async function bioUnlock(){
   const e=$("#err");window.bioBusy=true;
