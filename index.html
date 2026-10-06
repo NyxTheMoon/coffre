@@ -80,6 +80,7 @@ input[type=checkbox]{width:22px;height:22px;margin:0;padding:0;accent-color:var(
 input[type=range]{padding:0;border:0;background:transparent;accent-color:var(--brass)}
 input[type=search]{margin-bottom:14px}
 .ent .ico{width:38px;height:38px;font-size:20px}
+@media print{body>*:not(#ps){display:none!important}#ps{display:block!important;background:#fff;color:#000;padding:20px;font:14px/1.6 sans-serif}#ps p{color:#000;margin:0 0 8px}}#ps{display:none}
 </style>
 </head>
 <body>
@@ -173,7 +174,7 @@ function lock(){cats=CATS.slice();trash=[];log=[];renC=null;q="";key=null;dek=nu
 let idle;
 function bump(){clearTimeout(idle);if(key&&!pendingCode)idle=setTimeout(lock,prefs.lock*1000)}
 ["click","keydown","touchstart"].forEach(e=>document.addEventListener(e,bump,{passive:true}));
-document.addEventListener("visibilitychange",()=>{if(document.hidden&&key&&!pendingCode&&prefs.leave)lock()});
+document.addEventListener("visibilitychange",()=>{if(document.hidden&&key&&!pendingCode&&prefs.leave&&!window.bioBusy)lock()});
 
 const EYE='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 const EYEOFF='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.9 10.9 0 0 1 12 19C5 19 1 12 1 12a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.1 9.1 0 0 1 12 5c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>';
@@ -217,6 +218,60 @@ const exp=i=>{if(!i.x)return null;const d=dleft(i);return d<0?{t:"Expiré",col:"
 const SORTS={az:(a,b)=>a.t.localeCompare(b.t,"fr"),za:(a,b)=>b.t.localeCompare(a.t,"fr"),new:(a,b)=>(b.d||0)-(a.d||0),old:(a,b)=>(a.d||0)-(b.d||0)};
 const sortItems=l=>l.slice().sort(SORTS[prefs.sort]||SORTS.az);
 const twoTap=(b,lab,fn)=>{b.onclick=()=>{if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Confirmer ?";setTimeout(()=>{b.dataset.arm="";b.textContent=lab},4000);return}fn()}};
+const dl=(n,t,x)=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([x],{type:t}));a.download=n;document.body.appendChild(a);a.click();a.remove()};
+const ics=l=>{const n=new Date().toISOString().replace(/[-:]|\.\d+/g,"");return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Mon coffre//FR\r\n"+l.map(i=>{const d=new Date(i.x+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+1);return "BEGIN:VEVENT\r\nUID:"+i.id+"@coffre\r\nDTSTAMP:"+n+"\r\nDTSTART;VALUE=DATE:"+i.x.replace(/-/g,"")+"\r\nDTEND;VALUE=DATE:"+d.toISOString().slice(0,10).replace(/-/g,"")+"\r\nSUMMARY:"+i.t.replace(/[\\;,\n]/g," ")+"\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Echeance\r\nTRIGGER:-P7D\r\nEND:VALARM\r\nEND:VEVENT\r\n"}).join("")+"END:VCALENDAR\r\n"};
+function printSheet(l){const d=document.createElement("div");d.id="ps";d.innerHTML="<h1>Fiche d'urgence</h1>"+l.map(i=>`<p><b>${esc(i.t)}</b> : ${esc(i.v)}</p>`).join("");document.body.appendChild(d);window.print();setTimeout(()=>d.remove(),800)}
+const BK="coffre_bio",bioOn=()=>{try{return !!localStorage.getItem(BK)}catch(e){return false}};
+const bioGet=async(id,salt)=>{const a=await navigator.credentials.get({publicKey:{challenge:rnd(32),allowCredentials:[{type:"public-key",id}],userVerification:"required",timeout:60000,extensions:{prf:{eval:{first:salt}}}}});const p=a.getClientExtensionResults().prf;if(!p||!p.results||!p.results.first)throw 0;return crypto.subtle.importKey("raw",p.results.first,"AES-GCM",false,["encrypt","decrypt"])};
+async function bioEnable(){
+  const m=$("#bioM");window.bioBusy=true;
+  try{
+    if(!window.PublicKeyCredential||!dek)throw 1;
+    const c=await navigator.credentials.create({publicKey:{rp:{name:"Mon coffre",id:location.hostname},user:{id:rnd(16),name:"coffre",displayName:"Mon coffre"},challenge:rnd(32),pubKeyCredParams:[{type:"public-key",alg:-7},{type:"public-key",alg:-257}],authenticatorSelection:{authenticatorAttachment:"platform",userVerification:"required"},timeout:60000,extensions:{prf:{}}}});
+    if(!(c.getClientExtensionResults().prf||{}).enabled)throw 2;
+    const salt=rnd(32),k=await bioGet(c.rawId,salt),iv=rnd(12);
+    const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},k,dek);
+    localStorage.setItem(BK,JSON.stringify({id:b64(c.rawId),s:b64(salt),i:b64(iv),d:b64(ct)}));
+    setTimeout(()=>{window.bioBusy=false},1500);render();
+  }catch(e){setTimeout(()=>{window.bioBusy=false},1500);const mm=$("#bioM");if(mm)mm.textContent=e===2?"Pas pris en charge ici. Sur Android : ouvre l'appli dans Chrome, connecté à un compte Google, avec un verrouillage d'écran. Sinon, utilise le code court.":"Activation impossible ou annulée (il faut ouvrir l'appli en https)."}
+}
+async function bioUnlock(){
+  const e=$("#err");window.bioBusy=true;
+  try{
+    const b=JSON.parse(localStorage.getItem(BK)),k=await bioGet(ub(b.id),ub(b.s));
+    const raw=new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM",iv:ub(b.i)},k,ub(b.d)));
+    const o=JSON.parse(load()),dk=await dkey(raw);
+    const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:ub(o.i)},dk,ub(o.d));
+    const dd=document.querySelector(".dial");if(dd){dd.classList.add("spin");await new Promise(z=>setTimeout(z,650))}
+    dek=raw;key=dk;items=pdata(pt);meta={pw:o.pw,rc:o.rc};fails=0;msg="";
+    const f=getF();if(f.n)warnF=f;setF({});log.unshift({t:Date.now()});log=log.slice(0,10);await save();
+    setTimeout(()=>{window.bioBusy=false},1500);bump();render();
+  }catch(x){setTimeout(()=>{window.bioBusy=false},1500);if(e)e.textContent="Empreinte / visage non reconnu : utilise ton mot de passe."}
+}
+const PK="coffre_pin",pinOn=()=>{try{return !!localStorage.getItem(PK)}catch(e){return false}};
+async function openWithDek(raw){
+  const o=JSON.parse(load()),dk=await dkey(raw);
+  const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:ub(o.i)},dk,ub(o.d));
+  dek=raw;key=dk;items=pdata(pt);meta={pw:o.pw,rc:o.rc};fails=0;msg="";
+  const f=getF();if(f.n)warnF=f;setF({});log.unshift({t:Date.now()});log=log.slice(0,10);await save();bump();render();
+}
+async function pinEnable(){
+  const v=$("#pn").value,m=$("#bioM");
+  if(!/^\d{6,10}$/.test(v)){m.textContent="Le code court doit faire 6 à 10 chiffres.";return}
+  m.textContent="Chiffrement en cours…";
+  try{localStorage.setItem(PK,JSON.stringify({w:await wrap(v,ITP,dek),n:0}));render()}catch(e){m.textContent="Activation impossible."}
+}
+async function pinUnlock(){
+  const e=$("#err"),v=$("#pk").value;if(!v)return;
+  let p;try{p=JSON.parse(localStorage.getItem(PK))}catch(x){return}
+  e.textContent="Vérification…";
+  try{await openWithDek(await unwrap(v,ITP,p.w))}
+  catch(x){
+    p.n=(p.n||0)+1;const left=5-p.n;
+    if(left<=0){try{localStorage.removeItem(PK)}catch(y){}render();$("#err").textContent="Trop d'essais : le code court est désactivé. Utilise ton mot de passe."}
+    else{try{localStorage.setItem(PK,JSON.stringify(p))}catch(y){}e.textContent="Code court incorrect ("+left+" essai"+(left>1?"s":"")+" restant"+(left>1?"s":"")+")."}
+  }
+}
 const XV=["set","gen","edit","urg","trash","bulk","stats","log"];
 function extraTop(){
   let h="";
@@ -274,10 +329,11 @@ function xview(app){
     <input id="t" value="${esc(it.t)}"><textarea id="v">${esc(it.v)}</textarea>
     <label class="note">Date d'échéance (facultatif)</label><input id="x" type="date" value="${esc(it.x||"")}">
     <label class="chk"><input id="ug" type="checkbox"${it.u?" checked":""}> Afficher dans le mode urgence</label>
-    <div class="row"><button id="ok">Enregistrer</button><button class="sec" id="dup">Dupliquer</button></div>`;
+    <div class="row"><button id="ok">Enregistrer</button><button class="sec" id="dup">Dupliquer</button>${it.x?'<button class="sec" id="ic">Ajouter au calendrier</button>':""}</div>`;
     $("#bk3").onclick=()=>{view="list";render()};
     $("#ok").onclick=async()=>{const t=$("#t").value.trim(),v=$("#v").value;if(!t||!v)return;Object.assign(it,{c:$("#c").value,t,v,x:$("#x").value||"",u:$("#ug").checked,m:Date.now()});await save();view="list";render()};
     $("#dup").onclick=async()=>{items.push(Object.assign({},it,{id:crypto.randomUUID(),t:it.t+" (copie)",d:Date.now(),m:Date.now(),f:false}));await save();view="list";render()};
+    if($("#ic"))$("#ic").onclick=()=>dl("echeance.ics","text/calendar",ics([it]));
     return true;
   }
   if(view==="gen"){
@@ -305,8 +361,8 @@ function xview(app){
   if(view==="urg"){
     const l=items.filter(i=>i.u);
     app.innerHTML=`${back("Retour")}<h1 style="margin-top:14px">Urgence</h1><p>Les informations vitales, bien visibles. Pour en ajouter : Modifier une information, puis « Afficher dans le mode urgence ».</p>
-    ${l.length?l.map(i=>`<div class="ent" style="margin-bottom:12px"><small class="note">${esc(i.c)}</small><div style="font-size:1.1em;font-weight:700">${esc(i.t)}</div><div style="font-size:1.35em;margin-top:6px;white-space:pre-wrap;word-break:break-word">${esc(i.v)}</div></div>`).join(""):"<p>Rien pour l'instant.</p>"}`;
-    $("#bk3").onclick=()=>{view="list";render()};return true;
+    ${l.length?l.map(i=>`<div class="ent" style="margin-bottom:12px"><small class="note">${esc(i.c)}</small><div style="font-size:1.1em;font-weight:700">${esc(i.t)}</div><div style="font-size:1.35em;margin-top:6px;white-space:pre-wrap;word-break:break-word">${esc(i.v)}</div></div>`).join(""):"<p>Rien pour l'instant.</p>"}${l.length?'<div class="row"><button id="pr">Imprimer la fiche d\'urgence</button></div><p class="note" style="margin-top:8px">La fiche imprimée n\'est pas chiffrée : garde-la sur toi, pas à la vue de tous.</p>':""}`;
+    $("#bk3").onclick=()=>{view="list";render()};if($("#pr"))$("#pr").onclick=()=>printSheet(l);return true;
   }
   if(view==="trash"){
     app.innerHTML=`${back("Réglages")}<h1 style="margin-top:14px">Corbeille</h1><p>Les informations supprimées sont gardées 30 jours.</p>
@@ -368,9 +424,9 @@ function xview(app){
       S("lock","Verrouillage automatique",[[30,"30 secondes"],[60,"1 minute"],[120,"2 minutes"],[300,"5 minutes"],[900,"15 minutes"]])+
       S("leave","Verrouiller en quittant l'appli",YN)+
       S("clip","Vider le presse-papiers après une copie",[[15,"15 secondes"],[30,"30 secondes"],[60,"1 minute"],[0,"Jamais"]])+
-      S("reveal","Durée d'affichage d'une valeur masquée",[[5,"5 secondes"],[10,"10 secondes"],[30,"30 secondes"],[60,"1 minute"]]))}
+      S("reveal","Durée d'affichage d'une valeur masquée",[[5,"5 secondes"],[10,"10 secondes"],[30,"30 secondes"],[60,"1 minute"]])+`<div class="row" style="margin-top:6px"><button class="sec" id="bio">${bioOn()?"Désactiver":"Activer"} l'empreinte / le visage</button></div><p class="note" id="bioM" style="margin-top:6px">Ouvre le coffre sans taper le mot de passe. Le mot de passe reste toujours possible.</p>`+`<div class="sect">Code court</div>`+(pinOn()?`<button class="sec" id="pind">Désactiver le code court</button>`:`<input id="pn" type="password" inputmode="numeric" maxlength="10" placeholder="Code court (6 à 10 chiffres)"><button class="sec" id="pine">Activer le code court</button><p class="note" style="margin-top:6px">Plus rapide, mais moins sûr que le mot de passe. Désactivé automatiquement après 5 erreurs.</p>`))}
     ${G("c","Mes rubriques",catRows+`<div class="row" style="margin-top:6px"><input id="nc2" placeholder="Nouvelle rubrique" maxlength="24" style="flex:1;margin:0"><button id="ac">Ajouter</button></div><p class="note" style="margin-top:6px">Une rubrique ne peut être supprimée que si elle est vide.</p>`)}
-    ${G("d","Outils",`<div class="row"><button class="sec" data-go="trash">Corbeille (${trash.length})</button><button class="sec" data-go="bulk">Ajout en masse</button><button class="sec" id="tpl">Ajouter des modèles à compléter</button><button class="sec" data-go="stats">Statistiques</button><button class="sec" data-go="log">Journal d'activité</button><button class="sec" data-go="gen">Générateur de mot de passe</button><button class="sec" data-go="backup">Sauvegarde (dernière : ${lb})</button><button class="sec" data-go="sec">Mot de passe et code de récupération</button><button class="bad" id="rsr">Réinitialiser les réglages</button></div>`)}`;
+    ${G("d","Outils",`<div class="row"><button class="sec" data-go="trash">Corbeille (${trash.length})</button><button class="sec" data-go="bulk">Ajout en masse</button><button class="sec" id="tpl">Ajouter des modèles à compléter</button><button class="sec" data-go="stats">Statistiques</button><button class="sec" id="icall">Échéances vers le calendrier</button><button class="sec" data-go="log">Journal d'activité</button><button class="sec" data-go="gen">Générateur de mot de passe</button><button class="sec" data-go="backup">Sauvegarde (dernière : ${lb})</button><button class="sec" data-go="sec">Mot de passe et code de récupération</button><button class="bad" id="rsr">Réinitialiser les réglages</button></div>`)}`;
     app.querySelectorAll("details.grp").forEach(d=>d.addEventListener("toggle",()=>{sopen[d.dataset.k]=d.open}));
     app.querySelectorAll("[data-pref]").forEach(e=>e.onchange=()=>{const k=e.dataset.pref;prefs[k]=isNaN(e.value)?e.value:Number(e.value);savePrefs();bump()});
     app.querySelectorAll("[data-pt]").forEach(e=>e.oninput=()=>{prefs[e.dataset.pt]=e.value;savePrefs()});
@@ -379,6 +435,9 @@ function xview(app){
     app.querySelectorAll("[data-up],[data-dn]").forEach(b=>b.onclick=async()=>{const k=+(b.dataset.up??b.dataset.dn),j=b.dataset.up!==undefined?k-1:k+1;if(j<0||j>=cats.length)return;[cats[k],cats[j]]=[cats[j],cats[k]];await save();render()});
     app.querySelectorAll("[data-rn]").forEach(b=>b.onclick=()=>{renC=b.dataset.rn;render()});
     if($("#rni")){$("#rni").focus();$("#rok").onclick=async()=>{const n=$("#rni").value.trim(),k=cats.indexOf(renC);if(!n||(cats.includes(n)&&n!==renC))return;cats[k]=n;items.concat(trash).forEach(i=>{if(i.c===renC)i.c=n});renC=null;await save();render()}}
+    $("#icall").onclick=()=>{const l=items.filter(i=>i.x);if(!l.length){$("#icall").textContent="Aucune échéance";return}dl("echeances.ics","text/calendar",ics(l))};
+    $("#bio").onclick=()=>{if(bioOn()){try{localStorage.removeItem(BK)}catch(e){}render()}else bioEnable()};
+    if($("#pine"))$("#pine").onclick=pinEnable;if($("#pind"))$("#pind").onclick=()=>{try{localStorage.removeItem(PK)}catch(e){}render()};
     $("#ac").onclick=async()=>{const n=$("#nc2").value.trim();if(!n||cats.includes(n))return;cats.push(n);await save();render()};
     twoTap($("#tpl"),"Ajouter des modèles à compléter",async()=>{cats.forEach(c=>(SUG[c]||[]).forEach(t=>{if(!items.some(i=>i.c===c&&i.t===t))items.push({id:crypto.randomUUID(),c,t,v:"À compléter",d:Date.now(),m:Date.now(),x:""})}));await save();cat="Tous";q="À compléter";view="list";render()});
     twoTap($("#rsr"),"Réinitialiser les réglages",()=>{prefs=Object.assign({},PD,{bk:prefs.bk});savePrefs();render()});
@@ -409,7 +468,7 @@ function _render(){
     <div class="row"><button class="bad" id="go3" disabled>Effacer et recréer</button><button class="sec" id="bk">Retour</button></div>`;
     $("#cf").oninput=()=>{$("#go3").disabled=$("#cf").value.trim().toUpperCase()!=="EFFACER"};
     $("#bk").onclick=()=>{view="list";render()};
-    $("#go3").onclick=()=>{try{localStorage.removeItem(KEY)}catch(e){}setF({});fails=0;view="list";render()};
+    $("#go3").onclick=()=>{try{localStorage.removeItem(KEY);localStorage.removeItem(BK);localStorage.removeItem(PK)}catch(e){}setF({});fails=0;view="list";render()};
     return;
   }
   if(!key&&view==="reset"){
@@ -448,7 +507,7 @@ function _render(){
     return;
   }
   if(key&&view==="sec"){
-    app.innerHTML=`<h1>Sécurité</h1>
+    app.innerHTML=`<button class="sec sm" id="bkt">‹ Retour</button><h1 style="margin-top:14px">Sécurité</h1>
     <p>Change ton mot de passe maître. Il faut connaître l'actuel.</p>
     <input id="o" type="password" autocomplete="off" placeholder="Mot de passe actuel">
     <input id="n1" type="password" autocomplete="off" placeholder="Nouveau mot de passe (12 caractères min.)">
@@ -459,7 +518,7 @@ function _render(){
     <p>Le code de récupération permet de rouvrir le coffre si tu oublies ton mot de passe. En générer un nouveau annule l'ancien.</p>
     <button class="sec" id="nc">Générer un nouveau code</button>
     <div class="row" style="margin-top:16px"><button class="sec" id="bk">Retour</button></div>`;
-    $("#bk").onclick=()=>{view="list";render()};
+    $("#bk").onclick=$("#bkt").onclick=()=>{view="list";render()};
     $("#chg").onclick=async()=>{
       const e=$("#err"),n1=$("#n1").value;
       e.style.color="";
@@ -481,15 +540,16 @@ function _render(){
     <input id="pw" type="password" autocomplete="off" placeholder="Mot de passe maître">
     ${first?'<input id="pw2" type="password" autocomplete="off" placeholder="Confirme le mot de passe"><p class="note">Au moins 12 caractères. Une phrase de plusieurs mots est idéale.</p>':""}
     <div class="err" id="err" role="alert"></div>
-    <button id="go">${first?"Créer le coffre":"Ouvrir"}</button>
+    <button id="go">${first?"Créer le coffre":"Ouvrir"}</button>${!first&&bioOn()?'<button class="sec" id="bg" style="margin-top:10px">Empreinte / visage</button>':""}${!first&&pinOn()?'<input id="pk" type="password" inputmode="numeric" maxlength="10" placeholder="Code court" style="margin-top:14px"><button class="sec" id="pg">Ouvrir avec le code court</button>':""}
     ${first?"":'<div class="row" style="margin-top:18px"><button class="sec sm" id="fg">Mot de passe oublié ?</button><button class="bad sm" id="wp">Tout perdu ?</button></div><p class="note" style="margin-top:12px">Verrouillage automatique après 1 minute d\'inactivité.</p>'}`;
     $("#go").onclick=()=>first?create():unlock();
+    if($("#bg"))$("#bg").onclick=bioUnlock;if($("#pg"))$("#pg").onclick=pinUnlock;
     if(!first){$("#fg").onclick=()=>{view="reset";render()};$("#wp").onclick=()=>{view="wipe";render()}}
     $("#pw").focus();
     return;
   }
   if(view==="add"){
-    app.innerHTML=`<h1>Nouvelle information</h1>
+    app.innerHTML=`<button class="sec sm" id="bkt">‹ Annuler</button><h1 style="margin-top:14px">Nouvelle information</h1>
     <select id="c">${cats.map(c=>`<option${c===cat?" selected":""}>${esc(c)}</option>`).join("")}</select>
     <p class="note" style="margin-bottom:6px">Touche une suggestion, ou écris ton propre nom :</p>
     <div class="row" id="sg" style="margin-bottom:12px"></div>
@@ -504,7 +564,7 @@ function _render(){
       $("#sg").querySelectorAll("button").forEach(b=>b.onclick=()=>{$("#t").value=l[b.dataset.n];$("#v").focus()});
     };
     $("#c").onchange=drawSug;drawSug();
-    $("#cx").onclick=()=>{view="list";render()};
+    $("#cx").onclick=$("#bkt").onclick=()=>{view="list";render()};
     $("#ok").onclick=async()=>{
       const t=$("#t").value.trim(),v=$("#v").value;
       if(!t||!v)return;
@@ -514,17 +574,20 @@ function _render(){
     return;
   }
   if(view==="backup"){
-    app.innerHTML=`<h1>Sauvegarde</h1>
+    app.innerHTML=`<button class="sec sm" id="bkt">‹ Réglages</button><h1 style="margin-top:14px">Sauvegarde</h1>
     <p>La sauvegarde reste chiffrée : sans ton mot de passe maître, elle est illisible. Copie-la dans un endroit sûr. Restaurer ajoute les informations manquantes à ton coffre : rien n'est remplacé ni effacé.</p>
     <button id="ex">Afficher la sauvegarde chiffrée</button>
     <textarea id="bl" placeholder="Sauvegarde chiffrée" style="margin-top:12px"></textarea>
     <input id="ip" type="password" autocomplete="off" placeholder="Mot de passe de la sauvegarde (pour restaurer)">
+    <div class="row" style="margin-bottom:10px"><button id="df">Télécharger en fichier</button></div><label class="note">Ou choisis un fichier de sauvegarde :</label><input id="fi" type="file">
     <div class="row"><button class="sec" id="cp">Copier</button><button class="sec" id="im">Fusionner cette sauvegarde</button></div>
     <div class="err" id="err" role="alert"></div>
     <div class="row" style="margin-top:16px"><button class="sec" id="bk">Retour</button></div>`;
-    $("#bk").onclick=()=>{view="list";render()};
+    $("#bk").onclick=()=>{view="list";render()};$("#bkt").onclick=()=>{view="set";render()};
     $("#ex").onclick=async()=>{$("#bl").value=await seal();prefs.bk=Date.now();savePrefs()};
     $("#cp").onclick=async()=>{try{await navigator.clipboard.writeText($("#bl").value)}catch(e){$("#bl").select()}};
+    $("#df").onclick=async()=>{const x=await seal();$("#bl").value=x;dl("coffre-"+new Date().toISOString().slice(0,10)+".json","application/json",x);prefs.bk=Date.now();savePrefs()};
+    $("#fi").onchange=async e=>{const f=e.target.files[0];if(f)$("#bl").value=(await f.text()).trim()};
     $("#im").onclick=async()=>{
       const pw=$("#ip").value;
       if(!pw){$("#err").textContent="Entre le mot de passe maître de cette sauvegarde.";return}
