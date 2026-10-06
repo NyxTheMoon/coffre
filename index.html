@@ -60,12 +60,50 @@ textarea{min-height:90px}
 .nb.fab svg{width:40px;height:40px;padding:8px;margin-top:-20px;background:var(--acc);color:var(--acc-ink);border-radius:50%;box-shadow:0 4px 14px rgba(0,0,0,.28)}
 .nb.fab.on svg{color:var(--acc-ink)}
 .hasnav #bk{display:none}
+.meter{height:6px;background:var(--panel);border-radius:3px;overflow:hidden;margin:-4px 0 4px}
+.meter i{display:block;height:100%;width:0;transition:width .2s}
+.ml{min-height:20px;margin-bottom:8px}
+details.grp{background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:2px 14px 6px;margin-bottom:12px}
+details.grp summary{cursor:pointer;font-weight:700;padding:12px 0;list-style:none}
+details.grp summary::-webkit-details-marker{display:none}
+details.grp summary::after{content:"+";float:right;color:var(--brass)}
+details.grp[open] summary::after{content:"–"}
+.grp label.note{display:block;margin:10px 0 4px}
+.grp .row{gap:10px}
+.dense .ent{padding:10px;margin-bottom:8px}.dense .val{margin:6px 0 8px}.dense .tile{min-height:96px}
+.grid.one{grid-template-columns:1fr}
+.grid.one .tile{min-height:0;flex-direction:row;align-items:center;gap:12px}
+.grid.one .tile b{margin:0;flex:1}
+.sect{margin:20px 0 8px;font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--mute);font-weight:700}
+.chk{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+input[type=checkbox]{width:22px;height:22px;margin:0;padding:0;accent-color:var(--brass)}
+input[type=range]{padding:0;border:0;background:transparent;accent-color:var(--brass)}
+input[type=search]{margin-bottom:14px}
+.ent .ico{width:38px;height:38px;font-size:20px}
 </style>
 </head>
 <body>
 <main id="app"></main>
 <script>
 const CATS=["Identité","Santé","Contacts","Documents","Finances","Notes"];
+let cats=CATS.slice();
+const PD={theme:"auto",accent:"brass",lock:60,leave:1,clip:30,reveal:10,mask:1,size:16,sort:"az",dense:0,layout:"grid",recent:1,vib:1,wipe:0,name:"",bk:0};
+let prefs=Object.assign({},PD);try{Object.assign(prefs,JSON.parse(localStorage.getItem("coffre_prefs")||"{}"))}catch(e){}
+const AC={brass:["#a06c14","#e0b04f"],teal:["#0d7a73","#4fd1c5"],rose:["#b5385a","#f27ba0"],green:["#3a7d2c","#8fd16f"],violet:["#6a48c9","#a99bff"]};
+function applyPrefs(){
+  const r=document.documentElement,b=document.body;
+  if(prefs.theme==="auto")r.removeAttribute("data-theme");else r.setAttribute("data-theme",prefs.theme);
+  b.style.fontSize=prefs.size+"px";b.classList.toggle("dense",!!prefs.dense);
+  const dark=prefs.theme==="dark"||(prefs.theme==="auto"&&!!window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);
+  ["--brass","--acc","--acc-ink"].forEach(p=>r.style.removeProperty(p));
+  if(prefs.accent!=="brass"&&AC[prefs.accent]){const c=AC[prefs.accent][dark?1:0];r.style.setProperty("--brass",c);r.style.setProperty("--acc",c);r.style.setProperty("--acc-ink",dark?"#10151c":"#fff")}
+}
+try{window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",applyPrefs)}catch(e){}
+const getF=()=>{try{return JSON.parse(localStorage.getItem("coffre_f")||"{}")}catch(e){return {}}};
+const setF=o=>{try{localStorage.setItem("coffre_f",JSON.stringify(o))}catch(e){}};
+const vib=()=>{try{if(prefs.vib&&navigator.vibrate)navigator.vibrate(15)}catch(e){}};
+function savePrefs(){try{localStorage.setItem("coffre_prefs",JSON.stringify(prefs))}catch(e){}applyPrefs()}
+function pdata(pt){const d=JSON.parse(dec.decode(pt));if(Array.isArray(d)){cats=CATS.slice();trash=[];log=[];return d}cats=d.cats&&d.cats.length?d.cats:CATS.slice();trash=(d.trash||[]).filter(t=>Date.now()-t.dt<2592e6);log=d.log||[];return d.items||[]}
 const SUG={
 "Identité":["Nom complet","Nom de naissance","Date de naissance","Lieu de naissance","Nationalité","Adresse actuelle","Numéro de sécurité sociale","Carte d'identité (n° + expiration)","Passeport (n° + expiration)","Permis de conduire (n° + expiration)","Titre de séjour","Téléphone","E-mail principal","Plaque d'immatriculation","Numéro de carte grise"],
 "Santé":["Groupe sanguin","Allergies","Maladies / traitements en cours","Médecin traitant","Mutuelle (n° adhérent)","Numéro de carte Vitale","Vaccins et rappels","Médicaments réguliers","Correction lunettes"],
@@ -76,6 +114,7 @@ const SUG={
 };
 const KEY="coffre_v1";
 const enc=new TextEncoder(),dec=new TextDecoder();
+let q="",editId=null,trash=[],log=[],warnF=null,renC=null,sopen={a:true},lastView="",lastCat="";
 let key=null,dek=null,meta=null,pendingCode=null,items=[],cat="Tous",shown=null,timer=null,fails=0,view="list",msg="";
 
 const $=s=>document.querySelector(s);
@@ -106,7 +145,7 @@ async function unwrap(secret,it,w){
 const dkey=raw=>crypto.subtle.importKey("raw",raw,"AES-GCM",false,["encrypt","decrypt"]);
 async function seal(){
   const iv=rnd(12);
-  const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(JSON.stringify(items)));
+  const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(JSON.stringify({items,cats,trash,log})));
   return JSON.stringify({v:2,pw:meta.pw,rc:meta.rc,i:b64(iv),d:b64(ct)});
 }
 async function openBlob(blob,secret,mode){
@@ -114,12 +153,12 @@ async function openBlob(blob,secret,mode){
   if(o.v===2){
     const raw=await unwrap(secret,mode==="rc"?ITR:ITP,o[mode]),k=await dkey(raw);
     const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:ub(o.i)},k,ub(o.d));
-    return {raw,k,items:JSON.parse(dec.decode(pt)),meta:{pw:o.pw,rc:o.rc}};
+    return {raw,k,items:pdata(pt),meta:{pw:o.pw,rc:o.rc}};
   }
   if(mode!=="pw")throw 0;
   const k=await derive(secret,ub(o.s),ITP);
   const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:ub(o.i)},k,ub(o.d));
-  return {legacy:true,items:JSON.parse(dec.decode(pt))};
+  return {legacy:true,items:pdata(pt)};
 }
 async function setupKeys(pw,list){
   dek=rnd(32);key=await dkey(dek);items=list;
@@ -130,21 +169,11 @@ async function setupKeys(pw,list){
 async function rotateCode(){const c=newCode();meta.rc=await wrap(c,ITR,dek);await save();return c}
 async function save(){if(!store(await seal()))msg="Enregistrement impossible : le stockage du navigateur est bloqué."}
 
-function bindWipe(b,label){
-  b.onclick=()=>{
-    if(b.dataset.arm!=="1"){
-      b.dataset.arm="1";b.textContent="Toucher à nouveau pour tout effacer (irréversible)";
-      setTimeout(()=>{b.dataset.arm="";b.textContent=label},5000);return;
-    }
-    try{localStorage.removeItem(KEY)}catch(e){}
-    fails=0;view="list";lock();
-  };
-}
-function lock(){key=null;dek=null;meta=null;pendingCode=null;items=[];shown=null;view="list";render()}
+function lock(){cats=CATS.slice();trash=[];log=[];renC=null;q="";key=null;dek=null;meta=null;pendingCode=null;items=[];shown=null;view="list";render()}
 let idle;
-function bump(){clearTimeout(idle);if(key&&!pendingCode)idle=setTimeout(lock,60000)}
+function bump(){clearTimeout(idle);if(key&&!pendingCode)idle=setTimeout(lock,prefs.lock*1000)}
 ["click","keydown","touchstart"].forEach(e=>document.addEventListener(e,bump,{passive:true}));
-document.addEventListener("visibilitychange",()=>{if(document.hidden&&key&&!pendingCode)lock()});
+document.addEventListener("visibilitychange",()=>{if(document.hidden&&key&&!pendingCode&&prefs.leave)lock()});
 
 const EYE='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 const EYEOFF='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.9 10.9 0 0 1 12 19C5 19 1 12 1 12a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.1 9.1 0 0 1 12 5c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>';
@@ -180,20 +209,209 @@ const SAVE=I('<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14"/>');
 const LOCKI=I('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>');
 const MINI='<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="var(--brass)" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="var(--brass)"/></svg>';
 const DIAL='<svg class="dial" viewBox="0 0 120 120" width="124" height="124" aria-hidden="true"><circle cx="60" cy="60" r="57" fill="var(--panel)" stroke="var(--brass)" stroke-width="3"/><g class="ring" stroke="var(--brass)" stroke-width="2.2" stroke-linecap="round">'+Array.from({length:24},(_,k)=>`<line x1="60" y1="9" x2="60" y2="${k%6?14:20}" transform="rotate(${k*15} 60 60)"/>`).join("")+'<circle cx="60" cy="60" r="31" fill="none" stroke-width="1.5"/></g><circle cx="60" cy="60" r="9" fill="var(--brass)"/><rect x="57.5" y="62" width="5" height="14" rx="2" fill="var(--brass)"/><path d="M55 1h10l-5 9z" fill="var(--ink)"/></svg>';
-function render(){_render();addEyes();addNav()}
+const FOLDER=I('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>');
+const GEAR=I('<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>');
+const ci=c=>CI[c]||FOLDER;
+const dleft=i=>Math.ceil((new Date(i.x)-Date.now())/864e5);
+const exp=i=>{if(!i.x)return null;const d=dleft(i);return d<0?{t:"Expiré",col:"var(--bad)"}:d<=60?{t:"Expire dans "+d+" j",col:"var(--brass)"}:{t:"Expire le "+i.x.split("-").reverse().join("/"),col:"var(--mute)"}};
+const SORTS={az:(a,b)=>a.t.localeCompare(b.t,"fr"),za:(a,b)=>b.t.localeCompare(a.t,"fr"),new:(a,b)=>(b.d||0)-(a.d||0),old:(a,b)=>(a.d||0)-(b.d||0)};
+const sortItems=l=>l.slice().sort(SORTS[prefs.sort]||SORTS.az);
+const twoTap=(b,lab,fn)=>{b.onclick=()=>{if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Confirmer ?";setTimeout(()=>{b.dataset.arm="";b.textContent=lab},4000);return}fn()}};
+const XV=["set","gen","edit","urg","trash","bulk","stats","log"];
+function extraTop(){
+  let h="";
+  if(warnF)h+=`<div class="ent" style="border-color:var(--bad);margin-bottom:12px"><b>Tentatives de connexion échouées</b><p class="note" style="margin:4px 0 10px">${warnF.n} essai${warnF.n>1?"s":""} raté${warnF.n>1?"s":""} depuis ta dernière ouverture (dernier le ${new Date(warnF.t).toLocaleString("fr-FR")}).</p><button class="sm" data-dw="1">Compris</button></div>`;
+  const todo=items.filter(i=>i.v==="À compléter").length;
+  if(todo)h+=`<div class="ent" style="margin-bottom:12px"><b>${todo} information${todo>1?"s":""} à compléter</b><div class="row" style="margin-top:8px"><button class="sec sm" data-q="À compléter">Voir la liste</button></div></div>`;
+  return h+`<div class="row" style="margin-bottom:10px"><button class="sec sm" data-go="urg">Mode urgence</button></div>`;
+}
+function recentHtml(){
+  if(!prefs.recent)return "";
+  const r=items.filter(i=>i.m).sort((a,b)=>b.m-a.m).slice(0,3);
+  return r.length?`<div class="sect">Récemment modifiés</div>`+r.map(entryCard).join(""):"";
+}
+function score(p){let v=0;if(p.length>=12)v++;if(p.length>=16)v++;if(/[a-z]/.test(p)&&/[A-Z]/.test(p))v++;if(/\d/.test(p))v++;if(/[^A-Za-z0-9]/.test(p))v++;if(new Set(p).size<5)v=Math.min(v,1);return Math.min(v,4)}
+function addMeters(){
+  const L=["Très faible","Faible","Moyen","Fort","Très fort"],C=["var(--bad)","var(--bad)","var(--brass)","var(--brass)","var(--brass)"];
+  [["#pw","#pw2"],["#n1",null]].forEach(([a,b])=>{
+    const inp=$(a);if(!inp||(b&&!$(b)))return;
+    const w=inp.closest(".pwwrap")||inp,m=document.createElement("div");
+    m.innerHTML='<div class="meter"><i></i></div><div class="note ml"></div>';w.after(m);
+    const up=()=>{const sc=inp.value?score(inp.value):-1,i=m.querySelector("i");i.style.width=sc<0?"0":(sc+1)*20+"%";i.style.background=C[Math.max(sc,0)];m.querySelector(".ml").textContent=sc<0?"":"Solidité : "+L[sc]};
+    inp.addEventListener("input",up);up();
+  });
+}function entryCard(i){
+  const e=exp(i),vis=!prefs.mask||shown===i.id;
+  return `<div class="ent"><div class="eh"><span class="badge">${ci(i.c)}</span><div style="flex:1;min-width:0"><b>${esc(i.t)}</b><br><small class="note">${esc(i.c)}${i.v==="À compléter"?` · <span style="color:var(--bad)">À compléter</span>`:""}${i.u?` · <span style="color:var(--brass)">Urgence</span>`:""}${e?` · <span style="color:${e.col}">${e.t}</span>`:""}</small></div><button class="ico" data-fav="${i.id}" aria-label="Favori" style="color:${i.f?"var(--brass)":"var(--mute)"}">${i.f?"★":"☆"}</button></div>
+  <div class="val">${vis?esc(i.v):"••••••••••"}</div>
+  <div class="row">${prefs.mask?`<button class="sec sm" data-show="${i.id}">${shown===i.id?"Masquer":"Afficher"}</button>`:""}<button class="sec sm" data-copy="${i.id}">Copier</button><button class="sec sm" data-edit="${i.id}">Modifier</button><button class="bad sm" data-del="${i.id}">Supprimer</button></div></div>`;
+}
+function bindEnt(box){
+  box.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{cat=b.dataset.cat;render()});
+  box.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{view=b.dataset.go;render()});
+  box.querySelectorAll("[data-show]").forEach(b=>b.onclick=()=>{
+    clearTimeout(timer);shown=shown===b.dataset.show?null:b.dataset.show;render();
+    if(shown)timer=setTimeout(()=>{shown=null;if(key&&view==="list")render()},prefs.reveal*1000);
+  });
+  box.querySelectorAll("[data-copy]").forEach(b=>b.onclick=async()=>{
+    const it=items.find(x=>x.id===b.dataset.copy);
+    try{await navigator.clipboard.writeText(it.v);vib();b.textContent="Copié";if(prefs.clip)setTimeout(()=>navigator.clipboard.writeText("").catch(()=>{}),prefs.clip*1000)}catch(e){b.textContent="Échec"}
+  });
+  box.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>{q=b.dataset.q;render()});
+  box.querySelectorAll("[data-dw]").forEach(b=>b.onclick=()=>{warnF=null;render()});
+  box.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>{editId=b.dataset.edit;view="edit";render()});
+  box.querySelectorAll("[data-fav]").forEach(b=>b.onclick=async()=>{const it=items.find(x=>x.id===b.dataset.fav);vib();it.f=!it.f;await save();render()});
+  box.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
+    if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Confirmer ?";setTimeout(()=>{b.dataset.arm="";b.textContent="Supprimer"},4000);return}
+    const it=items.find(x=>x.id===b.dataset.del);it.dt=Date.now();trash.push(it);items=items.filter(x=>x!==it);await save();render();
+  });
+}
+function xview(app){
+  if(view==="edit"){
+    const it=items.find(x=>x.id===editId);if(!it){view="list";return false}
+    app.innerHTML=`<button class="sec sm" id="bk3">‹ Annuler</button><h1 style="margin-top:14px">Modifier</h1>
+    <select id="c">${cats.map(c=>`<option${c===it.c?" selected":""}>${esc(c)}</option>`).join("")}</select>
+    <input id="t" value="${esc(it.t)}"><textarea id="v">${esc(it.v)}</textarea>
+    <label class="note">Date d'échéance (facultatif)</label><input id="x" type="date" value="${esc(it.x||"")}">
+    <label class="chk"><input id="ug" type="checkbox"${it.u?" checked":""}> Afficher dans le mode urgence</label>
+    <div class="row"><button id="ok">Enregistrer</button><button class="sec" id="dup">Dupliquer</button></div>`;
+    $("#bk3").onclick=()=>{view="list";render()};
+    $("#ok").onclick=async()=>{const t=$("#t").value.trim(),v=$("#v").value;if(!t||!v)return;Object.assign(it,{c:$("#c").value,t,v,x:$("#x").value||"",u:$("#ug").checked,m:Date.now()});await save();view="list";render()};
+    $("#dup").onclick=async()=>{items.push(Object.assign({},it,{id:crypto.randomUUID(),t:it.t+" (copie)",d:Date.now(),m:Date.now(),f:false}));await save();view="list";render()};
+    return true;
+  }
+  if(view==="gen"){
+    app.innerHTML=`<button class="sec sm" id="bk3">‹ Réglages</button><h1 style="margin-top:14px">Générateur</h1><p>Crée un mot de passe solide. Il n'est enregistré nulle part.</p>
+    <div class="entry" id="go2" style="font:600 18px/1.6 ui-monospace,monospace;word-break:break-all;text-align:center;margin-bottom:14px"></div>
+    <label class="note">Longueur : <b id="gv">20</b></label><input id="gl" type="range" min="8" max="40" value="20">
+    <label class="chk"><input id="gu" type="checkbox" checked> Majuscules</label>
+    <label class="chk"><input id="gd" type="checkbox" checked> Chiffres</label>
+    <label class="chk"><input id="gs" type="checkbox" checked> Symboles</label>
+    <div class="row"><button id="gg">Générer</button><button class="sec" id="gc">Copier</button></div>`;
+    const gen=()=>{
+      let set="abcdefghijkmnopqrstuvwxyz";
+      if($("#gu").checked)set+="ABCDEFGHJKLMNPQRSTUVWXYZ";if($("#gd").checked)set+="23456789";if($("#gs").checked)set+="!@#$%&*-_=+?";
+      const L=+$("#gl").value,lim=256-256%set.length;let o="";
+      while(o.length<L){const b=rnd(1)[0];if(b<lim)o+=set[b%set.length]}
+      $("#go2").textContent=o;$("#gv").textContent=L;
+    };
+    ["gl","gu","gd","gs"].forEach(k=>$("#"+k).oninput=gen);$("#gg").onclick=gen;gen();
+    $("#gc").onclick=async()=>{try{await navigator.clipboard.writeText($("#go2").textContent);$("#gc").textContent="Copié";if(prefs.clip)setTimeout(()=>navigator.clipboard.writeText("").catch(()=>{}),prefs.clip*1000)}catch(e){}};
+    $("#bk3").onclick=()=>{view="set";render()};
+    return true;
+  }
+  const back=l=>`<button class="sec sm" id="bk3">‹ ${l}</button>`;
+  const toSet=()=>{const b=$("#bk3");b.onclick=()=>{view="set";render()}};
+  if(view==="urg"){
+    const l=items.filter(i=>i.u);
+    app.innerHTML=`${back("Retour")}<h1 style="margin-top:14px">Urgence</h1><p>Les informations vitales, bien visibles. Pour en ajouter : Modifier une information, puis « Afficher dans le mode urgence ».</p>
+    ${l.length?l.map(i=>`<div class="ent" style="margin-bottom:12px"><small class="note">${esc(i.c)}</small><div style="font-size:1.1em;font-weight:700">${esc(i.t)}</div><div style="font-size:1.35em;margin-top:6px;white-space:pre-wrap;word-break:break-word">${esc(i.v)}</div></div>`).join(""):"<p>Rien pour l'instant.</p>"}`;
+    $("#bk3").onclick=()=>{view="list";render()};return true;
+  }
+  if(view==="trash"){
+    app.innerHTML=`${back("Réglages")}<h1 style="margin-top:14px">Corbeille</h1><p>Les informations supprimées sont gardées 30 jours.</p>
+    ${trash.length?trash.map(i=>`<div class="ent" style="margin-bottom:12px"><div class="eh"><span class="badge">${ci(i.c)}</span><div style="flex:1"><b>${esc(i.t)}</b><br><small class="note">${esc(i.c)} · supprimée le ${new Date(i.dt).toLocaleDateString("fr-FR")}</small></div></div><div class="row" style="margin-top:10px"><button class="sec sm" data-rs="${i.id}">Restaurer</button><button class="bad sm" data-pd="${i.id}">Supprimer pour de bon</button></div></div>`).join("")+`<button class="bad" id="et">Vider la corbeille</button>`:"<p>La corbeille est vide.</p>"}`;
+    toSet();
+    app.querySelectorAll("[data-rs]").forEach(b=>b.onclick=async()=>{const it=trash.find(x=>x.id===b.dataset.rs);delete it.dt;if(!cats.includes(it.c))cats.push(it.c);items.push(it);trash=trash.filter(x=>x!==it);await save();render()});
+    app.querySelectorAll("[data-pd]").forEach(b=>twoTap(b,"Supprimer pour de bon",async()=>{trash=trash.filter(x=>x.id!==b.dataset.pd);await save();render()}));
+    if($("#et"))twoTap($("#et"),"Vider la corbeille",async()=>{trash=[];await save();render()});
+    return true;
+  }
+  if(view==="bulk"){
+    app.innerHTML=`${back("Réglages")}<h1 style="margin-top:14px">Ajout en masse</h1><p>Colle une liste, une information par ligne, sous la forme « Nom : valeur ».</p>
+    <select id="c">${cats.map(c=>`<option>${esc(c)}</option>`).join("")}</select>
+    <textarea id="bt" style="min-height:170px" placeholder="Téléphone : 06 12 34 56 78\nGroupe sanguin : O+"></textarea>
+    <div class="err" id="err" role="alert"></div><button id="ok">Ajouter</button>`;
+    toSet();
+    $("#ok").onclick=async()=>{
+      let n=0;const c=$("#c").value;
+      for(const l of $("#bt").value.split("\n")){const k=l.search(/[:=\t]/);if(k<1)continue;const t=l.slice(0,k).trim(),v=l.slice(k+1).trim();if(!t||!v)continue;items.push({id:crypto.randomUUID(),c,t,v,d:Date.now(),m:Date.now(),x:""});n++}
+      if(!n){$("#err").textContent="Aucune ligne valide. Écris par exemple : Téléphone : 0612345678";return}
+      await save();cat=c;view="list";render();
+    };
+    return true;
+  }
+  if(view==="stats"){
+    const cnt=c=>items.filter(i=>i.c===c).length,mx=Math.max(1,...cats.map(cnt)),old=items.filter(i=>i.d).sort((a,b)=>a.d-b.d)[0];
+    const box=(n,l)=>`<div class="ent"><b style="font-size:1.6em">${n}</b><br><small class="note">${l}</small></div>`;
+    app.innerHTML=`${back("Réglages")}<h1 style="margin-top:14px">Statistiques</h1>
+    <div class="grid">${box(items.length,"informations")}${box(items.filter(i=>i.f).length,"favoris")}${box(items.filter(i=>i.u).length,"en mode urgence")}${box(items.filter(i=>i.x).length,"avec échéance")}${box(items.filter(i=>i.v==="À compléter").length,"à compléter")}${box(trash.length,"dans la corbeille")}</div>
+    <div class="sect">Par rubrique</div>${cats.map(c=>`<div style="margin-bottom:12px"><div class="row" style="justify-content:space-between"><span>${esc(c)}</span><b>${cnt(c)}</b></div><div class="meter"><i style="width:${cnt(c)/mx*100}%;background:var(--brass)"></i></div></div>`).join("")}
+    ${old?`<p class="note">Première information ajoutée le ${new Date(old.d).toLocaleDateString("fr-FR")}.</p>`:""}`;
+    toSet();return true;
+  }
+  if(view==="log"){
+    app.innerHTML=`${back("Réglages")}<h1 style="margin-top:14px">Journal d'activité</h1><p>Tes 10 dernières ouvertures du coffre. Les tentatives échouées sont signalées sur l'accueil à l'ouverture suivante.</p>
+    ${log.length?log.map(l=>`<div class="ent" style="margin-bottom:8px">${new Date(l.t).toLocaleString("fr-FR")}</div>`).join(""):"<p>Aucune ouverture enregistrée.</p>"}`;
+    toSet();return true;
+  }
+  if(view==="set"){
+    const S=(k,l,o)=>`<label class="note">${l}</label><select data-pref="${k}">${o.map(([v,t])=>`<option value="${v}"${String(prefs[k])===String(v)?" selected":""}>${t}</option>`).join("")}</select>`;
+    const G=(k,t,b)=>`<details class="grp" data-k="${k}"${sopen[k]?" open":""}><summary>${t}</summary>${b}</details>`;
+    const YN=[[1,"Oui"],[0,"Non"]],lb=prefs.bk?new Date(prefs.bk).toLocaleDateString("fr-FR"):"jamais";
+    const catRows=cats.map((c,k)=>{const n=items.filter(i=>i.c===c).length;
+      if(renC===c)return `<div class="row" style="margin-bottom:8px"><input id="rni" value="${esc(c)}" maxlength="24" style="flex:1;margin:0"><button id="rok">OK</button></div>`;
+      return `<div class="row" style="margin-bottom:8px"><span style="flex:1;min-width:90px">${esc(c)} <small class="note">(${n})</small></span><button class="sec sm" data-up="${k}" aria-label="Monter">↑</button><button class="sec sm" data-dn="${k}" aria-label="Descendre">↓</button><button class="sec sm" data-rn="${esc(c)}">Renommer</button>${n||cats.length<2?"":`<button class="bad sm" data-dc="${esc(c)}">Suppr.</button>`}</div>`}).join("");
+    app.innerHTML=`<h1>Réglages</h1><p>Tes préférences, enregistrées sur ce téléphone.</p>
+    ${G("a","Affichage",
+      S("theme","Thème",[["auto","Automatique"],["light","Clair"],["dark","Sombre"]])+
+      S("accent","Couleur d'accent",[["brass","Laiton"],["teal","Turquoise"],["rose","Rose"],["green","Vert"],["violet","Violet"]])+
+      S("size","Taille du texte",[[14,"Petit"],[16,"Normal"],[18,"Grand"],[20,"Très grand"]])+
+      S("dense","Densité",[[0,"Confortable"],[1,"Compacte"]])+
+      S("layout","Rubriques",[["grid","En grille"],["list","En liste"]])+
+      S("mask","Valeurs masquées par défaut",YN)+
+      S("sort","Tri des informations",[["az","A → Z"],["za","Z → A"],["new","Plus récentes d'abord"],["old","Plus anciennes d'abord"]])+
+      S("recent","Afficher « Récemment modifiés »",YN)+
+      S("vib","Vibration au toucher",YN)+
+      `<label class="note">Nom du coffre</label><input data-pt="name" maxlength="24" placeholder="Mon coffre" value="${esc(prefs.name||"")}">`)}
+    ${G("b","Sécurité",
+      S("lock","Verrouillage automatique",[[30,"30 secondes"],[60,"1 minute"],[120,"2 minutes"],[300,"5 minutes"],[900,"15 minutes"]])+
+      S("leave","Verrouiller en quittant l'appli",YN)+
+      S("clip","Vider le presse-papiers après une copie",[[15,"15 secondes"],[30,"30 secondes"],[60,"1 minute"],[0,"Jamais"]])+
+      S("reveal","Durée d'affichage d'une valeur masquée",[[5,"5 secondes"],[10,"10 secondes"],[30,"30 secondes"],[60,"1 minute"]]))}
+    ${G("c","Mes rubriques",catRows+`<div class="row" style="margin-top:6px"><input id="nc2" placeholder="Nouvelle rubrique" maxlength="24" style="flex:1;margin:0"><button id="ac">Ajouter</button></div><p class="note" style="margin-top:6px">Une rubrique ne peut être supprimée que si elle est vide.</p>`)}
+    ${G("d","Outils",`<div class="row"><button class="sec" data-go="trash">Corbeille (${trash.length})</button><button class="sec" data-go="bulk">Ajout en masse</button><button class="sec" id="tpl">Ajouter des modèles à compléter</button><button class="sec" data-go="stats">Statistiques</button><button class="sec" data-go="log">Journal d'activité</button><button class="sec" data-go="gen">Générateur de mot de passe</button><button class="sec" data-go="backup">Sauvegarde (dernière : ${lb})</button><button class="sec" data-go="sec">Mot de passe et code de récupération</button><button class="bad" id="rsr">Réinitialiser les réglages</button></div>`)}`;
+    app.querySelectorAll("details.grp").forEach(d=>d.addEventListener("toggle",()=>{sopen[d.dataset.k]=d.open}));
+    app.querySelectorAll("[data-pref]").forEach(e=>e.onchange=()=>{const k=e.dataset.pref;prefs[k]=isNaN(e.value)?e.value:Number(e.value);savePrefs();bump()});
+    app.querySelectorAll("[data-pt]").forEach(e=>e.oninput=()=>{prefs[e.dataset.pt]=e.value;savePrefs()});
+    app.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{view=b.dataset.go;render()});
+    app.querySelectorAll("[data-dc]").forEach(b=>b.onclick=async()=>{cats=cats.filter(c=>c!==b.dataset.dc);await save();render()});
+    app.querySelectorAll("[data-up],[data-dn]").forEach(b=>b.onclick=async()=>{const k=+(b.dataset.up??b.dataset.dn),j=b.dataset.up!==undefined?k-1:k+1;if(j<0||j>=cats.length)return;[cats[k],cats[j]]=[cats[j],cats[k]];await save();render()});
+    app.querySelectorAll("[data-rn]").forEach(b=>b.onclick=()=>{renC=b.dataset.rn;render()});
+    if($("#rni")){$("#rni").focus();$("#rok").onclick=async()=>{const n=$("#rni").value.trim(),k=cats.indexOf(renC);if(!n||(cats.includes(n)&&n!==renC))return;cats[k]=n;items.concat(trash).forEach(i=>{if(i.c===renC)i.c=n});renC=null;await save();render()}}
+    $("#ac").onclick=async()=>{const n=$("#nc2").value.trim();if(!n||cats.includes(n))return;cats.push(n);await save();render()};
+    twoTap($("#tpl"),"Ajouter des modèles à compléter",async()=>{cats.forEach(c=>(SUG[c]||[]).forEach(t=>{if(!items.some(i=>i.c===c&&i.t===t))items.push({id:crypto.randomUUID(),c,t,v:"À compléter",d:Date.now(),m:Date.now(),x:""})}));await save();cat="Tous";q="À compléter";view="list";render()});
+    twoTap($("#rsr"),"Réinitialiser les réglages",()=>{prefs=Object.assign({},PD,{bk:prefs.bk});savePrefs();render()});
+    return true;
+  }
+  return false;
+}
+function render(){const y=window.scrollY,same=view===lastView&&cat===lastCat;_render();addEyes();addMeters();addNav();lastView=view;lastCat=cat;if(same){try{window.scrollTo(0,y)}catch(e){}}}
 function addNav(){
   let n=document.getElementById("nav");
-  const show=key&&["list","add","backup","sec"].includes(view);
+  const show=key&&["list","add","backup","sec",...XV].includes(view);
+  const act={backup:"set",gen:"set",trash:"set",bulk:"set",stats:"set",log:"set",edit:"list",urg:"list"}[view]||view;
   document.body.classList.toggle("hasnav",!!show);
   if(!show){if(n)n.remove();return}
-  $("#app").insertAdjacentHTML("afterbegin",`<header class="bar"><span class="brand">${MINI}Mon coffre</span><button class="ico" id="lk" aria-label="Verrouiller">${LOCKI}</button></header>`);
-  $("#lk").onclick=lock;
+  $("#app").insertAdjacentHTML("afterbegin",`<header class="bar"><span class="brand">${MINI}${esc(prefs.name||"Mon coffre")}</span><button class="ico" id="lk" aria-label="Verrouiller">${LOCKI}</button></header>`);
+  $("#lk").onclick=()=>{vib();lock()};
   if(!n){n=document.createElement("nav");n.id="nav";document.body.appendChild(n)}
-  n.innerHTML=[["list","Coffre",GRID],["sec","Sécurité",SHIELD],["add","Ajouter",PLUS],["backup","Sauvegarde",SAVE]].map(([v,l,p])=>`<button class="nb${v===view?" on":""}${v==="add"?" fab":""}" data-v="${v}" aria-label="${l}">${p}<span>${l}</span></button>`).join("");
-  n.querySelectorAll("button").forEach(b=>b.onclick=()=>{view=b.dataset.v;if(view==="list")cat="Tous";render()});
+  n.innerHTML=[["list","Coffre",GRID],["sec","Sécurité",SHIELD],["add","Ajouter",PLUS],["set","Réglages",GEAR]].map(([v,l,p])=>`<button class="nb${v===act?" on":""}${v==="add"?" fab":""}" data-v="${v}" aria-label="${l}">${p}<span>${l}</span></button>`).join("");
+  n.querySelectorAll("button").forEach(b=>b.onclick=()=>{view=b.dataset.v;if(view==="list"){cat="Tous";q=""}render()});
 }
 function _render(){
   const app=$("#app");
+  if(key&&XV.includes(view)&&xview(app))return;
+  if(!key&&view==="wipe"){
+    app.innerHTML=`<h1>Tout effacer</h1>
+    <p>À utiliser seulement si tu as perdu ton mot de passe ET ton code de récupération. Les données actuelles seront perdues pour toujours et tu repartiras avec un coffre vide.</p>
+    <input id="cf" autocomplete="off" autocapitalize="characters" placeholder="Écris EFFACER pour confirmer">
+    <div class="row"><button class="bad" id="go3" disabled>Effacer et recréer</button><button class="sec" id="bk">Retour</button></div>`;
+    $("#cf").oninput=()=>{$("#go3").disabled=$("#cf").value.trim().toUpperCase()!=="EFFACER"};
+    $("#bk").onclick=()=>{view="list";render()};
+    $("#go3").onclick=()=>{try{localStorage.removeItem(KEY)}catch(e){}setF({});fails=0;view="list";render()};
+    return;
+  }
   if(!key&&view==="reset"){
     app.innerHTML=`<h1>Mot de passe oublié</h1>
     <p>Entre ton code de récupération et choisis un nouveau mot de passe.</p>
@@ -203,8 +421,8 @@ function _render(){
     <div class="err" id="err" role="alert"></div>
     <div class="row"><button id="ok">Réinitialiser</button><button class="sec" id="bk">Retour</button></div>
     <p class="note" style="margin-top:14px">Sans ton mot de passe ni ton code, les données ne peuvent pas être récupérées : c'est le prix d'un vrai chiffrement.</p>
-    <div class="row" style="margin-top:14px"><button class="bad sm" id="wp">Effacer et recréer un coffre</button></div>`;
-    bindWipe($("#wp"),"Effacer et recréer un coffre");
+    <div class="row" style="margin-top:14px"><button class="bad sm" id="wp2">J'ai tout perdu</button></div>`;
+    $("#wp2").onclick=()=>{view="wipe";render()};
     $("#bk").onclick=()=>{view="list";render()};
     $("#ok").onclick=async()=>{
       const e=$("#err"),n1=$("#n1").value;
@@ -264,19 +482,20 @@ function _render(){
     ${first?'<input id="pw2" type="password" autocomplete="off" placeholder="Confirme le mot de passe"><p class="note">Au moins 12 caractères. Une phrase de plusieurs mots est idéale.</p>':""}
     <div class="err" id="err" role="alert"></div>
     <button id="go">${first?"Créer le coffre":"Ouvrir"}</button>
-    ${first?"":'<div class="row" style="margin-top:18px"><button class="sec sm" id="fg">Mot de passe oublié ?</button><button class="bad sm" id="wp">Effacer et recréer un coffre</button></div><p class="note" style="margin-top:12px">Verrouillage automatique après 1 minute d\'inactivité.</p>'}`;
+    ${first?"":'<div class="row" style="margin-top:18px"><button class="sec sm" id="fg">Mot de passe oublié ?</button><button class="bad sm" id="wp">Tout perdu ?</button></div><p class="note" style="margin-top:12px">Verrouillage automatique après 1 minute d\'inactivité.</p>'}`;
     $("#go").onclick=()=>first?create():unlock();
-    if(!first){$("#fg").onclick=()=>{view="reset";render()};bindWipe($("#wp"),"Effacer et recréer un coffre")}
+    if(!first){$("#fg").onclick=()=>{view="reset";render()};$("#wp").onclick=()=>{view="wipe";render()}}
     $("#pw").focus();
     return;
   }
   if(view==="add"){
     app.innerHTML=`<h1>Nouvelle information</h1>
-    <select id="c">${CATS.map(c=>`<option${c===cat?" selected":""}>${c}</option>`).join("")}</select>
+    <select id="c">${cats.map(c=>`<option${c===cat?" selected":""}>${esc(c)}</option>`).join("")}</select>
     <p class="note" style="margin-bottom:6px">Touche une suggestion, ou écris ton propre nom :</p>
     <div class="row" id="sg" style="margin-bottom:12px"></div>
     <input id="t" placeholder="Nom (ex. Numéro de sécu)">
     <textarea id="v" placeholder="Valeur"></textarea>
+    <label class="note">Date d'échéance (facultatif)</label><input id="x" type="date">
     <div class="row"><button id="ok">Enregistrer</button><button class="sec" id="cx">Annuler</button></div>`;
     const drawSug=()=>{
       const used=items.filter(i=>i.c===$("#c").value).map(i=>i.t);
@@ -289,73 +508,66 @@ function _render(){
     $("#ok").onclick=async()=>{
       const t=$("#t").value.trim(),v=$("#v").value;
       if(!t||!v)return;
-      items.push({id:crypto.randomUUID(),c:$("#c").value,t,v});
+      items.push({id:crypto.randomUUID(),c:$("#c").value,t,v,d:Date.now(),m:Date.now(),x:$("#x").value||""});
       await save();view="list";render();
     };
     return;
   }
   if(view==="backup"){
     app.innerHTML=`<h1>Sauvegarde</h1>
-    <p>La sauvegarde reste chiffrée : sans ton mot de passe maître, elle est illisible. Copie-la dans un endroit sûr.</p>
+    <p>La sauvegarde reste chiffrée : sans ton mot de passe maître, elle est illisible. Copie-la dans un endroit sûr. Restaurer ajoute les informations manquantes à ton coffre : rien n'est remplacé ni effacé.</p>
     <button id="ex">Afficher la sauvegarde chiffrée</button>
     <textarea id="bl" placeholder="Sauvegarde chiffrée" style="margin-top:12px"></textarea>
     <input id="ip" type="password" autocomplete="off" placeholder="Mot de passe de la sauvegarde (pour restaurer)">
-    <div class="row"><button class="sec" id="cp">Copier</button><button class="sec" id="im">Restaurer depuis ce texte</button></div>
+    <div class="row"><button class="sec" id="cp">Copier</button><button class="sec" id="im">Fusionner cette sauvegarde</button></div>
     <div class="err" id="err" role="alert"></div>
-    <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
-    <button class="bad" id="wipe">Effacer tout le coffre</button>
     <div class="row" style="margin-top:16px"><button class="sec" id="bk">Retour</button></div>`;
     $("#bk").onclick=()=>{view="list";render()};
-    $("#ex").onclick=async()=>{$("#bl").value=await seal()};
+    $("#ex").onclick=async()=>{$("#bl").value=await seal();prefs.bk=Date.now();savePrefs()};
     $("#cp").onclick=async()=>{try{await navigator.clipboard.writeText($("#bl").value)}catch(e){$("#bl").select()}};
     $("#im").onclick=async()=>{
       const pw=$("#ip").value;
       if(!pw){$("#err").textContent="Entre le mot de passe maître de cette sauvegarde.";return}
-      try{const r=await openBlob($("#bl").value.trim(),pw,"pw");
-        if(r.legacy){pendingCode=await setupKeys(pw,r.items);view="reccode"}
-        else{dek=r.raw;key=r.k;items=r.items;meta=r.meta;await save();view="list"}
-        render()}
-      catch(e){$("#err").textContent="Restauration impossible : texte ou mot de passe incorrect."}
-    };
-    $("#wipe").onclick=()=>{
-      const w=$("#wipe");
-      if(w.dataset.arm!=="1"){
-        w.dataset.arm="1";w.textContent="Toucher à nouveau pour tout effacer (irréversible)";
-        setTimeout(()=>{w.dataset.arm="";w.textContent="Effacer tout le coffre"},5000);return;
-      }
-      try{localStorage.removeItem(KEY)}catch(e){}
-      lock();
+      const kc=cats,kt=trash,kl=log;
+      try{
+        const r=await openBlob($("#bl").value.trim(),pw,"pw");
+        const bc=cats,bt=trash;cats=kc;trash=kt;log=kl;
+        const ids=new Set(items.map(i=>i.id)),add=r.items.filter(i=>!ids.has(i.id));
+        items.push(...add);
+        bc.forEach(c=>{if(!cats.includes(c))cats.push(c)});
+        bt.forEach(t=>{if(!ids.has(t.id)&&!trash.some(x=>x.id===t.id))trash.push(t)});
+        await save();
+        $("#err").style.color="var(--ink)";
+        $("#err").textContent=add.length+" information"+(add.length>1?"s":"")+" ajoutée"+(add.length>1?"s":"")+". Rien n'a été remplacé.";
+      }catch(e){cats=kc;trash=kt;log=kl;$("#err").style.color="";$("#err").textContent="Restauration impossible : texte ou mot de passe incorrect."}
     };
     return;
   }
   const cnt=c=>items.filter(i=>i.c===c).length;
   if(cat==="Tous"){
     app.innerHTML=`<h1>Mes rubriques</h1><p>${items.length?items.length+" information"+(items.length>1?"s":"")+" protégée"+(items.length>1?"s":"")+" sur ce téléphone.":"Ton coffre est vide. Touche + pour ajouter ta première information."}</p>
-    ${msg?`<div class="err" role="alert">${esc(msg)}</div>`:""}
-    <div class="grid">${CATS.map(c=>`<button class="tile" data-cat="${c}"><span class="badge">${CI[c]}</span><b>${c}</b><small>${cnt(c)} élément${cnt(c)>1?"s":""}</small></button>`).join("")}</div>`;
+    <input id="q" type="search" placeholder="Rechercher dans le coffre" value="${esc(q)}" autocomplete="off"><div id="res"></div>`;
+    const draw=()=>{
+      const t=q.trim().toLowerCase(),box=$("#res");
+      if(t){const r=sortItems(items.filter(i=>(i.t+" "+i.v+" "+i.c).toLowerCase().includes(t)));box.innerHTML=r.length?r.map(entryCard).join(""):"<p>Aucun résultat.</p>"}
+      else{
+        const soon=items.filter(i=>i.x&&dleft(i)<=60),fav=sortItems(items.filter(i=>i.f));
+        let h=extraTop();
+        if(items.length&&(!prefs.bk||Date.now()-prefs.bk>2592e6))h+=`<div class="ent"><b>Pense à ta sauvegarde</b><p class="note" style="margin:4px 0 10px">${prefs.bk?"Ta dernière sauvegarde date de plus de 30 jours.":"Tu n'as encore fait aucune sauvegarde."}</p><button class="sm" data-go="backup">Sauvegarder maintenant</button></div>`;
+        if(soon.length)h+=`<div class="ent"><b>Échéances à surveiller</b>${soon.map(i=>{const e=exp(i);return `<div class="note" style="margin-top:4px">${esc(i.t)} · <span style="color:${e.col}">${e.t}</span></div>`}).join("")}</div>`;
+        if(fav.length)h+=`<div class="sect">Favoris</div>`+fav.map(entryCard).join("");
+        h+=recentHtml()+`<div class="sect">Rubriques</div><div class="grid${prefs.layout==="list"?" one":""}">${cats.map(c=>`<button class="tile" data-cat="${esc(c)}"><span class="badge">${ci(c)}</span><b>${esc(c)}</b><small>${cnt(c)} élément${cnt(c)>1?"s":""}</small></button>`).join("")}</div>`;
+        box.innerHTML=h;
+      }
+      bindEnt(box);
+    };
+    $("#q").oninput=e=>{q=e.target.value;draw()};draw();
   }else{
-    const list=items.filter(i=>i.c===cat);
-    app.innerHTML=`<button class="sec sm" id="bk2">‹ Rubriques</button><h1 style="margin-top:14px">${cat}</h1>
-    ${list.length?list.map(i=>`<div class="ent"><div class="eh"><span class="badge">${CI[i.c]}</span><b>${esc(i.t)}</b></div>
-      <div class="val">${shown===i.id?esc(i.v):"••••••••••"}</div>
-      <div class="row"><button class="sec sm" data-show="${i.id}">${shown===i.id?"Masquer":"Afficher"}</button>
-      <button class="sec sm" data-copy="${i.id}">Copier</button>
-      <button class="bad sm" data-del="${i.id}">Supprimer</button></div></div>`).join(""):`<p>Rien ici pour l'instant. Touche + pour ajouter une information.</p>`}`;
+    const list=sortItems(items.filter(i=>i.c===cat));
+    app.innerHTML=`<button class="sec sm" id="bk2">‹ Rubriques</button><h1 style="margin-top:14px">${esc(cat)}</h1><div id="res">${list.length?list.map(entryCard).join(""):"<p>Rien ici pour l'instant. Touche + pour ajouter une information.</p>"}</div>`;
     $("#bk2").onclick=()=>{cat="Tous";render()};
+    bindEnt($("#res"));
   }
-  app.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{cat=b.dataset.cat;render()});
-  app.querySelectorAll("[data-show]").forEach(b=>b.onclick=()=>{
-    clearTimeout(timer);shown=shown===b.dataset.show?null:b.dataset.show;render();
-    if(shown)timer=setTimeout(()=>{shown=null;if(key&&view==="list")render()},10000);
-  });
-  app.querySelectorAll("[data-copy]").forEach(b=>b.onclick=async()=>{
-    const it=items.find(x=>x.id===b.dataset.copy);
-    try{await navigator.clipboard.writeText(it.v);b.textContent="Copié";setTimeout(()=>navigator.clipboard.writeText("").catch(()=>{}),30000)}catch(e){b.textContent="Échec"}
-  });
-  app.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
-    if(b.dataset.arm!=="1"){b.dataset.arm="1";b.textContent="Confirmer ?";setTimeout(()=>{b.dataset.arm="";b.textContent="Supprimer"},4000);return}
-    items=items.filter(x=>x.id!==b.dataset.del);await save();render();
-  });
 }
 
 async function create(){
@@ -375,13 +587,14 @@ async function unlock(){
     const dl=document.querySelector(".dial");if(dl){dl.classList.add("spin");await new Promise(z=>setTimeout(z,650))}
     fails=0;msg="";
     if(r.legacy){pendingCode=await setupKeys(pw,r.items);view="reccode"}
-    else{dek=r.raw;key=r.k;items=r.items;meta=r.meta}
+    else{dek=r.raw;key=r.k;items=r.items;meta=r.meta;const f=getF();if(f.n)warnF=f;setF({});log.unshift({t:Date.now()});log=log.slice(0,10);await save()}
     bump();render();
   }catch(x){
     fails++;e.textContent="Mot de passe incorrect.";
+    const f=getF();f.n=(f.n||0)+1;f.t=Date.now();setF(f);
   }
 }
-render();
+applyPrefs();render();
 if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
 </body>
