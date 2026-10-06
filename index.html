@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mon coffre</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0e5a52">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{--bg:#e8edec;--card:#f7f9f8;--ink:#14201e;--mute:#5a6b68;--line:#c9d3d1;--acc:#0e5a52;--acc-ink:#fff;--bad:#a8231b;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1716;--card:#18221f;--ink:#e6efed;--mute:#8fa39f;--line:#2b3a37;--acc:#4fc3b4;--acc-ink:#07201c;--bad:#ff8a80}}
+:root[data-theme="dark"]{--bg:#0f1716;--card:#18221f;--ink:#e6efed;--mute:#8fa39f;--line:#2b3a37;--acc:#4fc3b4;--acc-ink:#07201c;--bad:#ff8a80}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "IBM Plex Sans",system-ui,sans-serif}
+main{max-width:520px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:26px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
+p{margin:0 0 14px;color:var(--mute)}
+input,select,textarea,button{font:inherit;color:inherit}
+input,select,textarea{width:100%;padding:12px;border:1.5px solid var(--line);border-radius:8px;background:var(--card);margin-bottom:10px}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:3px solid var(--acc);outline-offset:1px}
+button{border:0;border-radius:8px;padding:12px 16px;background:var(--acc);color:var(--acc-ink);font-weight:600;cursor:pointer}
+button.sec{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+button.bad{background:transparent;color:var(--bad);border:1.5px solid var(--bad)}
+button.sm{padding:6px 10px;font-size:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row>*{flex:0 0 auto}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:8px}
+.tabs button{padding:8px 12px;font-size:14px;white-space:nowrap}
+.entry{background:var(--card);border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.entry b{display:block}
+.entry small{color:var(--mute)}
+.val{margin:6px 0 10px;word-break:break-word;white-space:pre-wrap;font-variant-numeric:tabular-nums}
+.pwwrap{position:relative;margin-bottom:10px}
+.pwwrap input{margin-bottom:0;padding-right:50px}
+.pwwrap .eye{position:absolute;right:4px;top:4px;bottom:4px;width:42px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;color:var(--mute);border-radius:6px}
+.err{color:var(--bad);min-height:22px;margin:0 0 8px}
+.note{font-size:14px;color:var(--mute)}
+textarea{min-height:90px}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+const CATS=["Identité","Santé","Contacts","Documents","Finances","Notes"];
+const SUG={
+"Identité":["Nom complet","Nom de naissance","Date de naissance","Lieu de naissance","Nationalité","Adresse actuelle","Numéro de sécurité sociale","Carte d'identité (n° + expiration)","Passeport (n° + expiration)","Permis de conduire (n° + expiration)","Titre de séjour","Téléphone","E-mail principal","Plaque d'immatriculation","Numéro de carte grise"],
+"Santé":["Groupe sanguin","Allergies","Maladies / traitements en cours","Médecin traitant","Mutuelle (n° adhérent)","Numéro de carte Vitale","Vaccins et rappels","Médicaments réguliers","Correction lunettes"],
+"Contacts":["Contact d'urgence","Famille proche","Employeur / école","Banque (conseiller, opposition CB)","Assurance (n° contrat + sinistre)","Propriétaire / syndic","Électricité (n° contrat)","Eau (n° contrat)","Internet (n° contrat)","Mobile (n° contrat)"],
+"Documents":["Où sont rangés mes papiers","Contrat de travail","Bail","Crédit (n° contrat)","Numéro fiscal","Numéro d'allocataire CAF","Numéro France Travail","Carte de transport","Échéance contrôle technique","Échéance assurance","Renouvellement de papiers"],
+"Finances":["IBAN compte principal","IBAN compte épargne","BIC","Assurance-vie (n° contrat)","Épargne / retraite (n° contrat)","Crédit en cours (organisme, fin)","Abonnement (nom, prix, date)"],
+"Notes":["Taille vêtements","Pointure","Taille de bague","Modèle de téléphone","Numéro IMEI (*#06#)","Consignes pour un proche"]
+};
+const KEY="coffre_v1";
+const enc=new TextEncoder(),dec=new TextDecoder();
+let key=null,dek=null,meta=null,pendingCode=null,items=[],cat="Tous",shown=null,timer=null,fails=0,view="list",msg="";
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const b64=b=>{let s="";new Uint8Array(b).forEach(x=>s+=String.fromCharCode(x));return btoa(s)};
+const ub=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const load=()=>{try{return localStorage.getItem(KEY)}catch(e){return null}};
+const store=v=>{try{localStorage.setItem(KEY,v);return true}catch(e){return false}};
+
+const ITP=600000,ITR=100000,ALPH="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const rnd=n=>crypto.getRandomValues(new Uint8Array(n));
+const newCode=()=>Array.from(rnd(24),x=>ALPH[x&31]).join("");
+const normCode=t=>t.toUpperCase().replace(/[^A-Z0-9]/g,"");
+const fmt=c=>c.match(/.{4}/g).join("-");
+async function derive(pw,sl,it){
+  const k=await crypto.subtle.importKey("raw",enc.encode(pw),"PBKDF2",false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt:sl,iterations:it,hash:"SHA-256"},k,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+}
+async function wrap(secret,it,raw){
+  const sl=rnd(16),iv=rnd(12),k=await derive(secret,sl,it);
+  const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},k,raw);
+  return {s:b64(sl),i:b64(iv),d:b64(ct)};
+}
+async function unwrap(secret,it,w){
+  const k=await derive(secret,ub(w.s),it);
+  return new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM",iv:ub(w.i)},k,ub(w.d)));
+}
+const dkey=raw=>crypto.subtle.importKey("raw",raw,"AES-GCM",false,["encrypt","decrypt"]);
+async function seal(){
+  const iv=rnd(12);
+  const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(JSON.stringify(items)));
+  return JSON.stringify({v:2,pw:meta.pw,rc:meta.rc,i:b64(iv),d:b64(ct)});
+}
+async function openBlob(blob,secret,mode){
+  const o=JSON.parse(blob);
+  if(o.v===2){
+    const raw=await unwrap(secret,mode==="rc"?ITR:ITP,o[mode]),k=await dkey(raw);
+    const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:ub(o.i)},k,ub(o.d));
+    return {raw,k,items:JSON.parse(dec.decode(pt)),meta:{pw:o.pw,rc:o.rc}};
+  }
+  if(mode!=="pw")throw 0;
+  const k=await derive(secret,ub(o.s),ITP);
+  const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:ub(o.i)},k,ub(o.d));
+  return {legacy:true,items:JSON.parse(dec.decode(pt))};
+}
+async function setupKeys(pw,list){
+  dek=rnd(32);key=await dkey(dek);items=list;
+  const code=newCode();
+  meta={pw:await wrap(pw,ITP,dek),rc:await wrap(code,ITR,dek)};
+  await save();return code;
+}
+async function rotateCode(){const c=newCode();meta.rc=await wrap(c,ITR,dek);await save();return c}
+async function save(){if(!store(await seal()))msg="Enregistrement impossible : le stockage du navigateur est bloqué."}
+
+function bindWipe(b,label){
+  b.onclick=()=>{
+    if(b.dataset.arm!=="1"){
+      b.dataset.arm="1";b.textContent="Toucher à nouveau pour tout effacer (irréversible)";
+      setTimeout(()=>{b.dataset.arm="";b.textContent=label},5000);return;
+    }
+    try{localStorage.removeItem(KEY)}catch(e){}
+    fails=0;view="list";lock();
+  };
+}
+function lock(){key=null;dek=null;meta=null;pendingCode=null;items=[];shown=null;view="list";render()}
+let idle;
+function bump(){clearTimeout(idle);if(key&&!pendingCode)idle=setTimeout(lock,60000)}
+["click","keydown","touchstart"].forEach(e=>document.addEventListener(e,bump,{passive:true}));
+document.addEventListener("visibilitychange",()=>{if(document.hidden&&key&&!pendingCode)lock()});
+
+const EYE='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYEOFF='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.9 10.9 0 0 1 12 19C5 19 1 12 1 12a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.1 9.1 0 0 1 12 5c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>';
+function addEyes(){
+  const a=document.activeElement;
+  document.querySelectorAll('#app input[type="password"]').forEach(inp=>{
+    const w=document.createElement("div");w.className="pwwrap";
+    inp.parentNode.insertBefore(w,inp);w.appendChild(inp);
+    const b=document.createElement("button");
+    b.type="button";b.className="eye";b.innerHTML=EYE;b.setAttribute("aria-label","Afficher le mot de passe");
+    b.onclick=()=>{
+      const show=inp.type==="password";
+      inp.type=show?"text":"password";
+      b.innerHTML=show?EYEOFF:EYE;
+      b.setAttribute("aria-label",show?"Masquer le mot de passe":"Afficher le mot de passe");
+    };
+    w.appendChild(b);
+  });
+  if(a&&a.focus&&document.body.contains(a))a.focus();
+}
+function render(){_render();addEyes()}
+function _render(){
+  const app=$("#app");
+  if(!key&&view==="reset"){
+    app.innerHTML=`<h1>Mot de passe oublié</h1>
+    <p>Entre ton code de récupération et choisis un nouveau mot de passe.</p>
+    <input id="rc" autocomplete="off" autocapitalize="characters" placeholder="Code de récupération">
+    <input id="n1" type="password" autocomplete="off" placeholder="Nouveau mot de passe (12 caractères min.)">
+    <input id="n2" type="password" autocomplete="off" placeholder="Confirme le nouveau mot de passe">
+    <div class="err" id="err" role="alert"></div>
+    <div class="row"><button id="ok">Réinitialiser</button><button class="sec" id="bk">Retour</button></div>
+    <p class="note" style="margin-top:14px">Sans ton mot de passe ni ton code, les données ne peuvent pas être récupérées : c'est le prix d'un vrai chiffrement.</p>
+    <div class="row" style="margin-top:14px"><button class="bad sm" id="wp">Effacer et recréer un coffre</button></div>`;
+    bindWipe($("#wp"),"Effacer et recréer un coffre");
+    $("#bk").onclick=()=>{view="list";render()};
+    $("#ok").onclick=async()=>{
+      const e=$("#err"),n1=$("#n1").value;
+      if(n1.length<12){e.textContent="Le nouveau mot de passe doit faire au moins 12 caractères.";return}
+      if(n1!==$("#n2").value){e.textContent="Les deux mots de passe sont différents.";return}
+      e.textContent="Vérification…";
+      try{
+        const r=await openBlob(load(),normCode($("#rc").value),"rc");
+        dek=r.raw;key=r.k;items=r.items;meta=r.meta;
+        meta.pw=await wrap(n1,ITP,dek);
+        pendingCode=await rotateCode();
+        view="reccode";bump();render();
+      }catch(x){key=null;dek=null;meta=null;items=[];e.textContent="Code de récupération incorrect."}
+    };
+    return;
+  }
+  if(key&&view==="reccode"){
+    app.innerHTML=`<h1>Ton code de récupération</h1>
+    <p>Écris ce code sur papier et garde-le hors du téléphone. Si tu oublies ton mot de passe, c'est le seul moyen de rouvrir le coffre. Il ne sera plus affiché ensuite.</p>
+    <div class="entry" style="font:600 20px/1.7 ui-monospace,monospace;letter-spacing:.06em;text-align:center;word-break:break-all">${fmt(pendingCode)}</div>
+    <button id="ok">J'ai noté mon code</button>`;
+    $("#ok").onclick=()=>{pendingCode=null;view="list";bump();render()};
+    return;
+  }
+  if(key&&view==="sec"){
+    app.innerHTML=`<h1>Sécurité</h1>
+    <p>Change ton mot de passe maître. Il faut connaître l'actuel.</p>
+    <input id="o" type="password" autocomplete="off" placeholder="Mot de passe actuel">
+    <input id="n1" type="password" autocomplete="off" placeholder="Nouveau mot de passe (12 caractères min.)">
+    <input id="n2" type="password" autocomplete="off" placeholder="Confirme le nouveau mot de passe">
+    <div class="err" id="err" role="alert"></div>
+    <button id="chg">Changer le mot de passe</button>
+    <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
+    <p>Le code de récupération permet de rouvrir le coffre si tu oublies ton mot de passe. En générer un nouveau annule l'ancien.</p>
+    <button class="sec" id="nc">Générer un nouveau code</button>
+    <div class="row" style="margin-top:16px"><button class="sec" id="bk">Retour</button></div>`;
+    $("#bk").onclick=()=>{view="list";render()};
+    $("#chg").onclick=async()=>{
+      const e=$("#err"),n1=$("#n1").value;
+      e.style.color="";
+      if(n1.length<12){e.textContent="Le nouveau mot de passe doit faire au moins 12 caractères.";return}
+      if(n1!==$("#n2").value){e.textContent="Les deux mots de passe sont différents.";return}
+      e.textContent="Vérification…";
+      try{await unwrap($("#o").value,ITP,meta.pw)}catch(x){e.textContent="Mot de passe actuel incorrect.";return}
+      meta.pw=await wrap(n1,ITP,dek);await save();
+      ["#o","#n1","#n2"].forEach(q=>$(q).value="");
+      e.style.color="var(--ink)";e.textContent="Mot de passe changé.";
+    };
+    $("#nc").onclick=async()=>{pendingCode=await rotateCode();view="reccode";render()};
+    return;
+  }
+  if(!key){
+    const first=!load();
+    app.innerHTML=`<h1>Mon coffre</h1>
+    <p>${first?"Crée ton mot de passe maître. Il chiffre tout sur ce téléphone. Un code de récupération te sera donné juste après, au cas où tu l'oublies.":"Entre ton mot de passe maître pour ouvrir le coffre."}</p>
+    <input id="pw" type="password" autocomplete="off" placeholder="Mot de passe maître">
+    ${first?'<input id="pw2" type="password" autocomplete="off" placeholder="Confirme le mot de passe"><p class="note">Au moins 12 caractères. Une phrase de plusieurs mots est idéale.</p>':""}
+    <div class="err" id="err" role="alert"></div>
+    <button id="go">${first?"Créer le coffre":"Ouvrir"}</button>
+    ${first?"":'<div class="row" style="margin-top:18px"><button class="sec sm" id="fg">Mot de passe oublié ?</button><button class="bad sm" id="wp">Effacer et recréer un coffre</button></div><p class="note" style="margin-top:12px">Verrouillage automatique après 1 minute d\'inactivité.</p>'}`;
+    $("#go").onclick=()=>first?create():unlock();
+    if(!first){$("#fg").onclick=()=>{view="reset";render()};bindWipe($("#wp"),"Effacer et recréer un coffre")}
+    $("#pw").focus();
+    return;
+  }
+  if(view==="add"){
+    app.innerHTML=`<h1>Nouvelle information</h1>
+    <select id="c">${CATS.map(c=>`<option${c===cat?" selected":""}>${c}</option>`).join("")}</select>
+    <p class="note" style="margin-bottom:6px">Touche une suggestion, ou écris ton propre nom :</p>
+    <div class="row" id="sg" style="margin-bottom:12px"></div>
+    <input id="t" placeholder="Nom (ex. Numéro de sécu)">
+    <textarea id="v" placeholder="Valeur"></textarea>
+    <div class="row"><button id="ok">Enregistrer</button><button class="sec" id="cx">Annuler</button></div>`;
+    const drawSug=()=>{
+      const used=items.filter(i=>i.c===$("#c").value).map(i=>i.t);
+      const l=(SUG[$("#c").value]||[]).filter(s=>!used.includes(s));
+      $("#sg").innerHTML=l.length?l.map((s,n)=>`<button class="sec sm" data-n="${n}">${esc(s)}</button>`).join(""):'<span class="note">Toutes les suggestions sont déjà utilisées.</span>';
+      $("#sg").querySelectorAll("button").forEach(b=>b.onclick=()=>{$("#t").value=l[b.dataset.n];$("#v").focus()});
+    };
+    $("#c").onchange=drawSug;drawSug();
+    $("#cx").onclick=()=>{view="list";render()};
+    $("#ok").onclick=async()=>{
+      const t=$("#t").value.trim(),v=$("#v").value;
+      if(!t||!v)return;
+      items.push({id:crypto.randomUUID(),c:$("#c").value,t,v});
+      await save();view="list";render();
+    };
+    return;
+  }
+  if(view==="backup"){
+    app.innerHTML=`<h1>Sauvegarde</h1>
+    <p>La sauvegarde reste chiffrée : sans ton mot de passe maître, elle est illisible. Copie-la dans un endroit sûr.</p>
+    <button id="ex">Afficher la sauvegarde chiffrée</button>
+    <textarea id="bl" placeholder="Sauvegarde chiffrée" style="margin-top:12px"></textarea>
+    <input id="ip" type="password" autocomplete="off" placeholder="Mot de passe de la sauvegarde (pour restaurer)">
+    <div class="row"><button class="sec" id="cp">Copier</button><button class="sec" id="im">Restaurer depuis ce texte</button></div>
+    <div class="err" id="err" role="alert"></div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+    <button class="bad" id="wipe">Effacer tout le coffre</button>
+    <div class="row" style="margin-top:16px"><button class="sec" id="bk">Retour</button></div>`;
+    $("#bk").onclick=()=>{view="list";render()};
+    $("#ex").onclick=async()=>{$("#bl").value=await seal()};
+    $("#cp").onclick=async()=>{try{await navigator.clipboard.writeText($("#bl").value)}catch(e){$("#bl").select()}};
+    $("#im").onclick=async()=>{
+      const pw=$("#ip").value;
+      if(!pw){$("#err").textContent="Entre le mot de passe maître de cette sauvegarde.";return}
+      try{const r=await openBlob($("#bl").value.trim(),pw,"pw");
+        if(r.legacy){pendingCode=await setupKeys(pw,r.items);view="reccode"}
+        else{dek=r.raw;key=r.k;items=r.items;meta=r.meta;await save();view="list"}
+        render()}
+      catch(e){$("#err").textContent="Restauration impossible : texte ou mot de passe incorrect."}
+    };
+    $("#wipe").onclick=()=>{
+      const w=$("#wipe");
+      if(w.dataset.arm!=="1"){
+        w.dataset.arm="1";w.textContent="Toucher à nouveau pour tout effacer (irréversible)";
+        setTimeout(()=>{w.dataset.arm="";w.textContent="Effacer tout le coffre"},5000);return;
+      }
+      try{localStorage.removeItem(KEY)}catch(e){}
+      lock();
+    };
+    return;
+  }
+  const list=items.filter(i=>cat==="Tous"||i.c===cat);
+  app.innerHTML=`<div class="top"><h1>Mon coffre</h1><button class="sec sm" id="lk">Verrouiller</button></div>
+  ${msg?`<div class="err" role="alert">${esc(msg)}</div>`:""}
+  <div class="tabs">${["Tous",...CATS].map(c=>`<button class="${c===cat?"":"sec"}" data-cat="${c}">${c}</button>`).join("")}</div>
+  ${list.length?list.map(i=>`<div class="entry"><b>${esc(i.t)}</b><small>${esc(i.c)}</small>
+    <div class="val">${shown===i.id?esc(i.v):"••••••••••"}</div>
+    <div class="row"><button class="sec sm" data-show="${i.id}">${shown===i.id?"Masquer":"Afficher"}</button>
+    <button class="sec sm" data-copy="${i.id}">Copier</button>
+    <button class="bad sm" data-del="${i.id}">Supprimer</button></div></div>`).join("")
+    :`<p>Rien ici pour l'instant. Ajoute ta première information.</p>`}
+  <div class="row" style="margin-top:14px"><button id="add">Ajouter</button><button class="sec" id="bkp">Sauvegarde</button><button class="sec" id="secb">Sécurité</button></div>`;
+  $("#lk").onclick=lock;
+  $("#add").onclick=()=>{view="add";render()};
+  $("#bkp").onclick=()=>{view="backup";render()};
+  $("#secb").onclick=()=>{view="sec";render()};
+  app.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{cat=b.dataset.cat;render()});
+  app.querySelectorAll("[data-show]").forEach(b=>b.onclick=()=>{
+    clearTimeout(timer);shown=shown===b.dataset.show?null:b.dataset.show;render();
+    if(shown)timer=setTimeout(()=>{shown=null;if(key&&view==="list")render()},10000);
+  });
+  app.querySelectorAll("[data-copy]").forEach(b=>b.onclick=async()=>{
+    const it=items.find(x=>x.id===b.dataset.copy);
+    try{await navigator.clipboard.writeText(it.v);b.textContent="Copié";setTimeout(()=>navigator.clipboard.writeText("").catch(()=>{}),30000)}catch(e){b.textContent="Échec"}
+  });
+  app.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
+    if(b.dataset.arm!=="1"){
+      b.dataset.arm="1";b.textContent="Confirmer ?";
+      setTimeout(()=>{b.dataset.arm="";b.textContent="Supprimer"},4000);return;
+    }
+    items=items.filter(x=>x.id!==b.dataset.del);await save();render();
+  });
+}
+
+async function create(){
+  const p=$("#pw").value,p2=$("#pw2").value,e=$("#err");
+  if(p.length<12){e.textContent="Le mot de passe doit faire au moins 12 caractères.";return}
+  if(p!==p2){e.textContent="Les deux mots de passe sont différents.";return}
+  e.textContent="Chiffrement en cours…";
+  pendingCode=await setupKeys(p,[]);view="reccode";bump();render();
+}
+async function unlock(){
+  const e=$("#err"),pw=$("#pw").value;
+  if(!pw)return;
+  e.textContent="Vérification…";
+  if(fails>=3)await new Promise(r=>setTimeout(r,Math.min(30000,1000*2**(fails-3))));
+  try{
+    const r=await openBlob(load(),pw,"pw");
+    fails=0;msg="";
+    if(r.legacy){pendingCode=await setupKeys(pw,r.items);view="reccode"}
+    else{dek=r.raw;key=r.k;items=r.items;meta=r.meta}
+    bump();render();
+  }catch(x){
+    fails++;e.textContent="Mot de passe incorrect.";
+  }
+}
+render();
+if("serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>
