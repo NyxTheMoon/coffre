@@ -221,14 +221,14 @@ const twoTap=(b,lab,fn)=>{b.onclick=()=>{if(b.dataset.arm!=="1"){b.dataset.arm="
 const dl=(n,t,x)=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([x],{type:t}));a.download=n;document.body.appendChild(a);a.click();a.remove()};
 const ics=l=>{const n=new Date().toISOString().replace(/[-:]|\.\d+/g,"");return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Mon coffre//FR\r\n"+l.map(i=>{const d=new Date(i.x+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+1);return "BEGIN:VEVENT\r\nUID:"+i.id+"@coffre\r\nDTSTAMP:"+n+"\r\nDTSTART;VALUE=DATE:"+i.x.replace(/-/g,"")+"\r\nDTEND;VALUE=DATE:"+d.toISOString().slice(0,10).replace(/-/g,"")+"\r\nSUMMARY:"+i.t.replace(/[\\;,\n]/g," ")+"\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Echeance\r\nTRIGGER:-P7D\r\nEND:VALARM\r\nEND:VEVENT\r\n"}).join("")+"END:VCALENDAR\r\n"};
 function printSheet(l){const d=document.createElement("div");d.id="ps";d.innerHTML="<h1>Fiche d'urgence</h1>"+l.map(i=>`<p><b>${esc(i.t)}</b> : ${esc(i.v)}</p>`).join("");document.body.appendChild(d);window.print();setTimeout(()=>d.remove(),800)}
-const BK="coffre_bio",bioOn=()=>{try{return !!localStorage.getItem(BK)}catch(e){return false}};
-const bioGet=async(id,salt)=>{const a=await navigator.credentials.get({publicKey:{challenge:rnd(32),allowCredentials:[{type:"public-key",id}],userVerification:"required",timeout:60000,extensions:{prf:{eval:{first:salt}}}}});const p=a.getClientExtensionResults().prf;if(!p||!p.results||!p.results.first)throw 0;return crypto.subtle.importKey("raw",p.results.first,"AES-GCM",false,["encrypt","decrypt"])};
+let bioDiag="";const BK="coffre_bio",bioOn=()=>{try{return !!localStorage.getItem(BK)}catch(e){return false}};
+const bioGet=async(id,salt)=>{const a=await navigator.credentials.get({publicKey:{challenge:rnd(32),allowCredentials:[{type:"public-key",id}],userVerification:"required",timeout:60000,extensions:{prf:{eval:{first:salt}}}}});bioDiag+=" | get:"+JSON.stringify(a.getClientExtensionResults(),(k,v)=>v instanceof ArrayBuffer?"[buf]":v);const p=a.getClientExtensionResults().prf;if(!p||!p.results||!p.results.first)throw 0;return crypto.subtle.importKey("raw",p.results.first,"AES-GCM",false,["encrypt","decrypt"])};
 async function bioEnable(){
-  const m=$("#bioM");window.bioBusy=true;
+  const m=$("#bioM");window.bioBusy=true;bioDiag="";
   try{
     if(!window.PublicKeyCredential||!dek)throw 1;
     const c=await navigator.credentials.create({publicKey:{rp:{name:"Mon coffre",id:location.hostname},user:{id:rnd(16),name:"coffre",displayName:"Mon coffre"},challenge:rnd(32),pubKeyCredParams:[{type:"public-key",alg:-7},{type:"public-key",alg:-257}],authenticatorSelection:{authenticatorAttachment:"platform",userVerification:"required"},timeout:60000,extensions:{prf:{}}}});
-    const salt=rnd(32),k=await bioGet(c.rawId,salt),iv=rnd(12);
+    bioDiag="create:"+JSON.stringify(c.getClientExtensionResults())+" att:"+(c.authenticatorAttachment||"?");const salt=rnd(32),k=await bioGet(c.rawId,salt),iv=rnd(12);
     const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},k,dek);
     localStorage.setItem(BK,JSON.stringify({id:b64(c.rawId),s:b64(salt),i:b64(iv),d:b64(ct)}));
     setTimeout(()=>{window.bioBusy=false},1500);render();
@@ -272,7 +272,7 @@ async function pinUnlock(){
   }
 }
 function bioHelp(mm,t){const u=location,ua=(navigator.userAgent.match(/(MiuiBrowser|SamsungBrowser|EdgA|Firefox|OPR|Chrome)\/[\d.]+/g)||[]).slice(0,2).join(", ")||"inconnu",c='style="color:var(--brass)"';
-  mm.innerHTML=esc(t)+"<br>Navigateur détecté : "+esc(ua)+"<br><a "+c+' href="intent://'+esc(u.host+u.pathname+u.search)+"#Intent;scheme="+u.protocol.replace(":","")+';package=com.android.chrome;end">Ouvrir dans Chrome</a> · <a '+c+' href="https://passwords.google.com" target="_blank" rel="noopener">Gestionnaire de mots de passe Google</a>'}
+  mm.innerHTML=esc(t)+"<br>Navigateur détecté : "+esc(ua)+(bioDiag?"<br>Diagnostic : "+esc(bioDiag):"")+"<br><a "+c+' href="intent://'+esc(u.host+u.pathname+u.search)+"#Intent;scheme="+u.protocol.replace(":","")+';package=com.android.chrome;end">Ouvrir dans Chrome</a> · <a '+c+' href="https://passwords.google.com" target="_blank" rel="noopener">Gestionnaire de mots de passe Google</a>'}
 const XV=["set","gen","edit","urg","trash","bulk","stats","log"];
 function extraTop(){
   let h="";
@@ -428,7 +428,7 @@ function xview(app){
       S("reveal","Durée d'affichage d'une valeur masquée",[[5,"5 secondes"],[10,"10 secondes"],[30,"30 secondes"],[60,"1 minute"]])+`<div class="row" style="margin-top:6px"><button class="sec" id="bio">${bioOn()?"Désactiver":"Activer"} l'empreinte / le visage</button></div><p class="note" id="bioM" style="margin-top:6px">Ouvre le coffre sans taper le mot de passe. Le mot de passe reste toujours possible.</p>`+`<div class="sect">Code court</div>`+(pinOn()?`<button class="sec" id="pind">Désactiver le code court</button>`:`<input id="pn" type="password" inputmode="numeric" maxlength="10" placeholder="Code court (6 à 10 chiffres)"><button class="sec" id="pine">Activer le code court</button><p class="note" style="margin-top:6px">Plus rapide, mais moins sûr que le mot de passe. Désactivé automatiquement après 5 erreurs.</p>`))}
     ${G("c","Mes rubriques",catRows+`<div class="row" style="margin-top:6px"><input id="nc2" placeholder="Nouvelle rubrique" maxlength="24" style="flex:1;margin:0"><button id="ac">Ajouter</button></div><p class="note" style="margin-top:6px">Une rubrique ne peut être supprimée que si elle est vide.</p>`)}
     ${G("d","Outils",`<div class="row"><button class="sec" data-go="trash">Corbeille (${trash.length})</button><button class="sec" data-go="bulk">Ajout en masse</button><button class="sec" id="tpl">Ajouter des modèles à compléter</button><button class="sec" data-go="stats">Statistiques</button><button class="sec" id="icall">Échéances vers le calendrier</button><button class="sec" id="upd">Mettre à jour l'appli</button><button class="sec" data-go="log">Journal d'activité</button><button class="sec" data-go="gen">Générateur de mot de passe</button><button class="sec" data-go="backup">Sauvegarde (dernière : ${lb})</button><button class="sec" data-go="sec">Mot de passe et code de récupération</button><button class="bad" id="rsr">Réinitialiser les réglages</button></div>`)}
-    <p class="note" style="text-align:center;margin-top:24px">Version 7</p>`;
+    <p class="note" style="text-align:center;margin-top:24px">Version 8</p>`;
     app.querySelectorAll("details.grp").forEach(d=>d.addEventListener("toggle",()=>{sopen[d.dataset.k]=d.open}));
     app.querySelectorAll("[data-pref]").forEach(e=>e.onchange=()=>{const k=e.dataset.pref;prefs[k]=isNaN(e.value)?e.value:Number(e.value);savePrefs();bump()});
     app.querySelectorAll("[data-pt]").forEach(e=>e.oninput=()=>{prefs[e.dataset.pt]=e.value;savePrefs()});
