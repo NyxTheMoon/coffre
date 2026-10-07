@@ -81,6 +81,15 @@ input[type=range]{padding:0;border:0;background:transparent;accent-color:var(--b
 input[type=search]{margin-bottom:14px}
 .ent .ico{width:38px;height:38px;font-size:20px}
 @media print{body>*:not(#ps){display:none!important}#ps{display:block!important;background:#fff;color:#000;padding:20px;font:14px/1.6 sans-serif}#ps p{color:#000;margin:0 0 8px}}#ps{display:none}
+.pr{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--line)}
+.pr:first-of-type{border-top:0}
+.grp .pr label{margin:0;flex:1;color:var(--ink);font-size:.95em}
+.grp .pr select,.grp .pr input{width:auto;max-width:52%;margin:0;padding:8px 10px;flex:0 0 auto}
+.mi{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;background:transparent;color:var(--ink);border:0;border-top:1px solid var(--line);border-radius:0;padding:13px 2px;font-weight:600;box-shadow:none}
+.mi::after{content:"›";color:var(--mute);font-size:1.3em}
+.mnu .mi:first-child{border-top:0}
+details.grp{padding:0 16px 4px}
+details.grp summary{padding:14px 0}
 </style>
 </head>
 <body>
@@ -88,7 +97,7 @@ input[type=search]{margin-bottom:14px}
 <script>
 const CATS=["Identité","Santé","Contacts","Documents","Finances","Notes"];
 let cats=CATS.slice();
-const PD={theme:"auto",accent:"brass",lock:60,leave:1,clip:30,reveal:10,mask:1,size:16,sort:"az",dense:0,layout:"grid",recent:1,vib:1,wipe:0,name:"",bk:0};
+const PD={home:"list",banner:1,warnE:30,warnB:7,rh:9,rv:1,dfmt:"short",theme:"auto",accent:"brass",lock:60,leave:1,clip:30,reveal:10,mask:1,size:16,sort:"az",dense:0,layout:"grid",recent:1,vib:1,wipe:0,name:"",bk:0};
 let prefs=Object.assign({},PD);try{Object.assign(prefs,JSON.parse(localStorage.getItem("coffre_prefs")||"{}"))}catch(e){}
 const AC={brass:["#a06c14","#e0b04f"],teal:["#0d7a73","#4fd1c5"],rose:["#b5385a","#f27ba0"],green:["#3a7d2c","#8fd16f"],violet:["#6a48c9","#a99bff"]};
 function applyPrefs(){
@@ -104,7 +113,7 @@ const getF=()=>{try{return JSON.parse(localStorage.getItem("coffre_f")||"{}")}ca
 const setF=o=>{try{localStorage.setItem("coffre_f",JSON.stringify(o))}catch(e){}};
 const vib=()=>{try{if(prefs.vib&&navigator.vibrate)navigator.vibrate(15)}catch(e){}};
 function savePrefs(){try{localStorage.setItem("coffre_prefs",JSON.stringify(prefs))}catch(e){}applyPrefs()}
-function pdata(pt){const d=JSON.parse(dec.decode(pt));if(Array.isArray(d)){cats=CATS.slice();trash=[];log=[];return d}cats=d.cats&&d.cats.length?d.cats:CATS.slice();trash=(d.trash||[]).filter(t=>Date.now()-t.dt<2592e6);log=d.log||[];return d.items||[]}
+function pdata(pt){const d=JSON.parse(dec.decode(pt));if(Array.isArray(d)){cats=CATS.slice();trash=[];log=[];bd=[];return d}cats=d.cats&&d.cats.length?d.cats:CATS.slice();trash=(d.trash||[]).filter(t=>Date.now()-t.dt<2592e6);log=d.log||[];bd=d.bd||[];return d.items||[]}
 const SUG={
 "Identité":["Nom complet","Nom de naissance","Date de naissance","Lieu de naissance","Nationalité","Adresse actuelle","Numéro de sécurité sociale","Carte d'identité (n° + expiration)","Passeport (n° + expiration)","Permis de conduire (n° + expiration)","Titre de séjour","Téléphone","E-mail principal","Plaque d'immatriculation","Numéro de carte grise"],
 "Santé":["Groupe sanguin","Allergies","Maladies / traitements en cours","Médecin traitant","Mutuelle (n° adhérent)","Numéro de carte Vitale","Vaccins et rappels","Médicaments réguliers","Correction lunettes"],
@@ -115,7 +124,7 @@ const SUG={
 };
 const KEY="coffre_v1";
 const enc=new TextEncoder(),dec=new TextDecoder();
-let q="",editId=null,trash=[],log=[],warnF=null,renC=null,sopen={a:true},lastView="",lastCat="";
+let q="",editId=null,bd=[],homed=false,trash=[],log=[],warnF=null,renC=null,sopen={a:true},lastView="",lastCat="";
 let key=null,dek=null,meta=null,pendingCode=null,items=[],cat="Tous",shown=null,timer=null,fails=0,view="list",msg="";
 
 const $=s=>document.querySelector(s);
@@ -146,7 +155,7 @@ async function unwrap(secret,it,w){
 const dkey=raw=>crypto.subtle.importKey("raw",raw,"AES-GCM",false,["encrypt","decrypt"]);
 async function seal(){
   const iv=rnd(12);
-  const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(JSON.stringify({items,cats,trash,log})));
+  const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(JSON.stringify({items,cats,trash,log,bd})));
   return JSON.stringify({v:2,pw:meta.pw,rc:meta.rc,i:b64(iv),d:b64(ct)});
 }
 async function openBlob(blob,secret,mode){
@@ -170,11 +179,11 @@ async function setupKeys(pw,list){
 async function rotateCode(){const c=newCode();meta.rc=await wrap(c,ITR,dek);await save();return c}
 async function save(){if(!store(await seal()))msg="Enregistrement impossible : le stockage du navigateur est bloqué."}
 
-function lock(){cats=CATS.slice();trash=[];log=[];renC=null;q="";key=null;dek=null;meta=null;pendingCode=null;items=[];shown=null;view="list";render()}
+function lock(){bd=[];homed=false;cats=CATS.slice();trash=[];log=[];renC=null;q="";key=null;dek=null;meta=null;pendingCode=null;items=[];shown=null;view="list";render()}
 let idle;
 function bump(){clearTimeout(idle);if(key&&!pendingCode)idle=setTimeout(lock,prefs.lock*1000)}
 ["click","keydown","touchstart"].forEach(e=>document.addEventListener(e,bump,{passive:true}));
-document.addEventListener("visibilitychange",()=>{if(document.hidden&&key&&!pendingCode&&prefs.leave&&!window.bioBusy)lock()});
+document.addEventListener("visibilitychange",()=>{if(document.hidden&&key&&!pendingCode&&prefs.leave)lock()});
 
 const EYE='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 const EYEOFF='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.9 10.9 0 0 1 12 19C5 19 1 12 1 12a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.1 9.1 0 0 1 12 5c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>';
@@ -211,6 +220,7 @@ const LOCKI=I('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8
 const MINI='<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="var(--brass)" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="var(--brass)"/></svg>';
 const DIAL='<svg class="dial" viewBox="0 0 120 120" width="124" height="124" aria-hidden="true"><circle cx="60" cy="60" r="57" fill="var(--panel)" stroke="var(--brass)" stroke-width="3"/><g class="ring" stroke="var(--brass)" stroke-width="2.2" stroke-linecap="round">'+Array.from({length:24},(_,k)=>`<line x1="60" y1="9" x2="60" y2="${k%6?14:20}" transform="rotate(${k*15} 60 60)"/>`).join("")+'<circle cx="60" cy="60" r="31" fill="none" stroke-width="1.5"/></g><circle cx="60" cy="60" r="9" fill="var(--brass)"/><rect x="57.5" y="62" width="5" height="14" rx="2" fill="var(--brass)"/><path d="M55 1h10l-5 9z" fill="var(--ink)"/></svg>';
 const FOLDER=I('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>');
+const CAL=I('<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>');
 const GEAR=I('<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>');
 const ci=c=>CI[c]||FOLDER;
 const dleft=i=>Math.ceil((new Date(i.x)-Date.now())/864e5);
@@ -221,32 +231,6 @@ const twoTap=(b,lab,fn)=>{b.onclick=()=>{if(b.dataset.arm!=="1"){b.dataset.arm="
 const dl=(n,t,x)=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([x],{type:t}));a.download=n;document.body.appendChild(a);a.click();a.remove()};
 const ics=l=>{const n=new Date().toISOString().replace(/[-:]|\.\d+/g,"");return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Mon coffre//FR\r\n"+l.map(i=>{const d=new Date(i.x+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+1);return "BEGIN:VEVENT\r\nUID:"+i.id+"@coffre\r\nDTSTAMP:"+n+"\r\nDTSTART;VALUE=DATE:"+i.x.replace(/-/g,"")+"\r\nDTEND;VALUE=DATE:"+d.toISOString().slice(0,10).replace(/-/g,"")+"\r\nSUMMARY:"+i.t.replace(/[\\;,\n]/g," ")+"\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Echeance\r\nTRIGGER:-P7D\r\nEND:VALARM\r\nEND:VEVENT\r\n"}).join("")+"END:VCALENDAR\r\n"};
 function printSheet(l){const d=document.createElement("div");d.id="ps";d.innerHTML="<h1>Fiche d'urgence</h1>"+l.map(i=>`<p><b>${esc(i.t)}</b> : ${esc(i.v)}</p>`).join("");document.body.appendChild(d);window.print();setTimeout(()=>d.remove(),800)}
-let bioDiag="";const BK="coffre_bio",bioOn=()=>{try{return !!localStorage.getItem(BK)}catch(e){return false}};
-const bioGet=async(id,salt)=>{const a=await navigator.credentials.get({publicKey:{challenge:rnd(32),allowCredentials:[{type:"public-key",id}],userVerification:"required",timeout:60000,extensions:{prf:{eval:{first:salt}}}}});bioDiag+=" | get:"+JSON.stringify(a.getClientExtensionResults(),(k,v)=>v instanceof ArrayBuffer?"[buf]":v);const p=a.getClientExtensionResults().prf;if(!p||!p.results||!p.results.first)throw 0;return crypto.subtle.importKey("raw",p.results.first,"AES-GCM",false,["encrypt","decrypt"])};
-async function bioEnable(){
-  const m=$("#bioM");window.bioBusy=true;bioDiag="";
-  try{
-    if(!window.PublicKeyCredential||!dek)throw 1;
-    const c=await navigator.credentials.create({publicKey:{rp:{name:"Mon coffre",id:location.hostname},user:{id:rnd(16),name:"coffre",displayName:"Mon coffre"},challenge:rnd(32),pubKeyCredParams:[{type:"public-key",alg:-7},{type:"public-key",alg:-257}],authenticatorSelection:{authenticatorAttachment:"platform",userVerification:"required"},timeout:60000,extensions:{prf:{}}}});
-    bioDiag="create:"+JSON.stringify(c.getClientExtensionResults())+" att:"+(c.authenticatorAttachment||"?");const salt=rnd(32),k=await bioGet(c.rawId,salt),iv=rnd(12);
-    const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},k,dek);
-    localStorage.setItem(BK,JSON.stringify({id:b64(c.rawId),s:b64(salt),i:b64(iv),d:b64(ct)}));
-    setTimeout(()=>{window.bioBusy=false},1500);render();
-  }catch(e){setTimeout(()=>{window.bioBusy=false},1500);const mm=$("#bioM");if(mm)bioHelp(mm,e===0||e===2?"Pas pris en charge ici. Sur Android : ouvre l'appli dans Chrome, connecté à un compte Google, avec un verrouillage d'écran. Sinon, utilise le code court.":"Activation impossible ou annulée (il faut ouvrir l'appli en https).")}
-}
-async function bioUnlock(){
-  const e=$("#err");window.bioBusy=true;
-  try{
-    const b=JSON.parse(localStorage.getItem(BK)),k=await bioGet(ub(b.id),ub(b.s));
-    const raw=new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM",iv:ub(b.i)},k,ub(b.d)));
-    const o=JSON.parse(load()),dk=await dkey(raw);
-    const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:ub(o.i)},dk,ub(o.d));
-    const dd=document.querySelector(".dial");if(dd){dd.classList.add("spin");await new Promise(z=>setTimeout(z,650))}
-    dek=raw;key=dk;items=pdata(pt);meta={pw:o.pw,rc:o.rc};fails=0;msg="";
-    const f=getF();if(f.n)warnF=f;setF({});log.unshift({t:Date.now()});log=log.slice(0,10);await save();
-    setTimeout(()=>{window.bioBusy=false},1500);bump();render();
-  }catch(x){setTimeout(()=>{window.bioBusy=false},1500);if(e)e.textContent="Empreinte / visage non reconnu : utilise ton mot de passe."}
-}
 const PK="coffre_pin",pinOn=()=>{try{return !!localStorage.getItem(PK)}catch(e){return false}};
 async function openWithDek(raw){
   const o=JSON.parse(load()),dk=await dkey(raw);
@@ -255,7 +239,7 @@ async function openWithDek(raw){
   const f=getF();if(f.n)warnF=f;setF({});log.unshift({t:Date.now()});log=log.slice(0,10);await save();bump();render();
 }
 async function pinEnable(){
-  const v=$("#pn").value,m=$("#bioM");
+  const v=$("#pn").value,m=$("#pinM");
   if(!/^\d{6,10}$/.test(v)){m.textContent="Le code court doit faire 6 à 10 chiffres.";return}
   m.textContent="Chiffrement en cours…";
   try{localStorage.setItem(PK,JSON.stringify({w:await wrap(v,ITP,dek),n:0}));render()}catch(e){m.textContent="Activation impossible."}
@@ -271,12 +255,24 @@ async function pinUnlock(){
     else{try{localStorage.setItem(PK,JSON.stringify(p))}catch(y){}e.textContent="Code court incorrect ("+left+" essai"+(left>1?"s":"")+" restant"+(left>1?"s":"")+")."}
   }
 }
-function bioHelp(mm,t){const u=location,ua=(navigator.userAgent.match(/(MiuiBrowser|SamsungBrowser|EdgA|Firefox|OPR|Chrome)\/[\d.]+/g)||[]).slice(0,2).join(", ")||"inconnu",c='style="color:var(--brass)"';
-  mm.innerHTML=esc(t)+"<br>Navigateur détecté : "+esc(ua)+(bioDiag?"<br>Diagnostic : "+esc(bioDiag):"")+"<br><a "+c+' href="intent://'+esc(u.host+u.pathname+u.search)+"#Intent;scheme="+u.protocol.replace(":","")+';package=com.android.chrome;end">Ouvrir dans Chrome</a> · <a '+c+' href="https://passwords.google.com" target="_blank" rel="noopener">Gestionnaire de mots de passe Google</a>'}
-const XV=["set","gen","edit","urg","trash","bulk","stats","log"];
+const KL={a:"Anniversaire",m:"Anniversaire de mariage",fm:"Fête des mères",fp:"Fête des pères",nl:"Noël",na:"Nouvel An",sv:"Saint-Valentin",o:"Autre date"},KP={nl:"25/12",na:"01/01",sv:"14/02"};
+const easter=y=>{const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),t=h+l-7*m+114;return new Date(y,Math.floor(t/31)-1,t%31+1)};
+const fday=(y,k)=>{if(k==="fp"){const d=new Date(y,5,1);d.setDate(1+(7-d.getDay())%7+14);return d}const d=new Date(y,4,31);d.setDate(31-d.getDay());const pe=easter(y);pe.setDate(pe.getDate()+49);if(+d===+pe)d.setDate(d.getDate()+7);return d};
+const bsum=b=>{const k=b.k||"a";return k==="a"?"Anniversaire de "+b.n:k==="m"?"Anniversaire de mariage : "+b.n:k==="o"||b.n===KL[k]?b.n:KL[k]+" : "+b.n};
+const fd=d=>d.toLocaleDateString("fr-FR",prefs.dfmt==="long"?{day:"numeric",month:"long",year:"numeric"}:undefined);
+const nextB=b=>{const t0=new Date().setHours(0,0,0,0),Y=new Date().getFullYear(),mk=y=>b.k==="fm"||b.k==="fp"?fday(y,b.k):new Date(y,b.m-1,b.d);let d=mk(Y);if(d<t0)d=mk(Y+1);return{n:Math.round((d-t0)/864e5),age:b.y?d.getFullYear()-b.y:null,d}};
+const bics=()=>{const n=new Date().toISOString().replace(/[-:]|\.\d+/g,""),z=x=>String(x).padStart(2,"0"),f=x=>x.getUTCFullYear()+z(x.getUTCMonth()+1)+z(x.getUTCDate());
+  return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Mon coffre//FR\r\n"+bd.map(b=>{const x0=(b.k==="fm"||b.k==="fp")?fday(new Date().getFullYear(),b.k):null,d=x0?new Date(Date.UTC(x0.getFullYear(),x0.getMonth(),x0.getDate(),12)):new Date(Date.UTC(b.y||2000,b.m-1,b.d,12)),e=new Date(d.getTime()+864e5);
+    return "BEGIN:VEVENT\r\nUID:bd-"+b.id+"@coffre\r\nDTSTAMP:"+n+"\r\nDTSTART;VALUE=DATE:"+f(d)+"\r\nDTEND;VALUE=DATE:"+f(e)+"\r\nRRULE:"+({fm:"FREQ=YEARLY;BYMONTH=5;BYDAY=-1SU",fp:"FREQ=YEARLY;BYMONTH=6;BYDAY=3SU"}[b.k]||"FREQ=YEARLY")+"\r\nSUMMARY:"+bsum(b).replace(/[\\;,\n]/g," ")+"\r\nTRANSP:TRANSPARENT"+(prefs.rv?"\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Rappel : demain\r\nTRIGGER:-PT"+(24-prefs.rh)+"H\r\nEND:VALARM":"")+"\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Rappel : aujourd'hui\r\nTRIGGER:PT"+prefs.rh+"H\r\nEND:VALARM\r\nEND:VEVENT\r\n"}).join("")+"END:VCALENDAR\r\n"};
+const xrOpts=v=>[["","Ne se répète pas"],["1","Chaque année"],["2","Tous les 2 ans"],["5","Tous les 5 ans"]].map(([a,t])=>`<option value="${a}"${(v||"")===a?" selected":""}>${t}</option>`).join("");
+const XRN='<p class="note" style="margin-top:6px">Si tu choisis une répétition, la date avance toute seule à la prochaine échéance une fois passée.</p>';
+function rollX(){let ch=false;const t=new Date().toISOString().slice(0,10);items.forEach(i=>{if(i.x&&i.xr){let g=0;while(i.x<t&&g++<200){const d=new Date(i.x+"T12:00:00");d.setFullYear(d.getFullYear()+(+i.xr));i.x=d.toISOString().slice(0,10);ch=true}}});return ch}
+const XV=["set","gen","edit","urg","trash","bulk","stats","log","ech","aud"];
 function extraTop(){
   let h="";
   if(warnF)h+=`<div class="ent" style="border-color:var(--bad);margin-bottom:12px"><b>Tentatives de connexion échouées</b><p class="note" style="margin:4px 0 10px">${warnF.n} essai${warnF.n>1?"s":""} raté${warnF.n>1?"s":""} depuis ta dernière ouverture (dernier le ${new Date(warnF.t).toLocaleString("fr-FR")}).</p><button class="sm" data-dw="1">Compris</button></div>`;
+  const bs=bd.map(b=>({b,...nextB(b)})).filter(o=>o.n<=prefs.warnB).sort((a,c)=>a.n-c.n);if(prefs.banner&&bs.length)h+=`<div class="ent" style="margin-bottom:12px"><b>Dates à venir</b><p class="note" style="margin:4px 0 10px">${bs.map(o=>esc(o.b.n)+" ("+(o.n===0?"aujourd'hui":o.n===1?"demain":"dans "+o.n+" j")+")").join(", ")}</p><button class="sec sm" data-go="ech">Ouvrir le calendrier</button></div>`;
+  const soon=items.filter(i=>i.x&&new Date(i.x+"T23:59:59")-Date.now()<prefs.warnE*864e5).length;if(prefs.banner&&soon)h+=`<div class="ent" style="margin-bottom:12px"><b>${soon} échéance${soon>1?"s":""} à surveiller</b><p class="note" style="margin:4px 0 10px">Dépassée${soon>1?"s":""} ou dans les ${prefs.warnE} prochains jours.</p><button class="sec sm" data-go="ech">Voir les échéances</button></div>`;
   const todo=items.filter(i=>i.v==="À compléter").length;
   if(todo)h+=`<div class="ent" style="margin-bottom:12px"><b>${todo} information${todo>1?"s":""} à compléter</b><div class="row" style="margin-top:8px"><button class="sec sm" data-q="À compléter">Voir la liste</button></div></div>`;
   return h+`<div class="row" style="margin-bottom:10px"><button class="sec sm" data-go="urg">Mode urgence</button></div>`;
@@ -328,11 +324,11 @@ function xview(app){
     app.innerHTML=`<button class="sec sm" id="bk3">‹ Annuler</button><h1 style="margin-top:14px">Modifier</h1>
     <select id="c">${cats.map(c=>`<option${c===it.c?" selected":""}>${esc(c)}</option>`).join("")}</select>
     <input id="t" value="${esc(it.t)}"><textarea id="v">${esc(it.v)}</textarea>
-    <label class="note">Date d'échéance (facultatif)</label><input id="x" type="date" value="${esc(it.x||"")}">
+    <label class="note">Date d'échéance (facultatif)</label><input id="x" type="date" value="${esc(it.x||"")}"><label class="note">Se répète</label><select id="xr">${xrOpts(it.xr)}</select>${XRN}
     <label class="chk"><input id="ug" type="checkbox"${it.u?" checked":""}> Afficher dans le mode urgence</label>
     <div class="row"><button id="ok">Enregistrer</button><button class="sec" id="dup">Dupliquer</button>${it.x?'<button class="sec" id="ic">Ajouter au calendrier</button>':""}</div>`;
     $("#bk3").onclick=()=>{view="list";render()};
-    $("#ok").onclick=async()=>{const t=$("#t").value.trim(),v=$("#v").value;if(!t||!v)return;Object.assign(it,{c:$("#c").value,t,v,x:$("#x").value||"",u:$("#ug").checked,m:Date.now()});await save();view="list";render()};
+    $("#ok").onclick=async()=>{const t=$("#t").value.trim(),v=$("#v").value;if(!t||!v)return;Object.assign(it,{c:$("#c").value,t,v,x:$("#x").value||"",xr:$("#x").value?$("#xr").value:"",u:$("#ug").checked,m:Date.now()});await save();view="list";render()};
     $("#dup").onclick=async()=>{items.push(Object.assign({},it,{id:crypto.randomUUID(),t:it.t+" (copie)",d:Date.now(),m:Date.now(),f:false}));await save();view="list";render()};
     if($("#ic"))$("#ic").onclick=()=>dl("echeance.ics","text/calendar",ics([it]));
     return true;
@@ -388,6 +384,37 @@ function xview(app){
     };
     return true;
   }
+  if(view==="ech"){
+    const D=864e5,t0=new Date().setHours(0,0,0,0),l=items.filter(i=>i.x).map(i=>({i,n:Math.round((new Date(i.x+"T00:00:00")-t0)/D)})).sort((a,b)=>a.n-b.n);
+    const bl=bd.map(b=>({b,...nextB(b)})).sort((a,c)=>a.n-c.n);
+    const brow=o=>`<div class="ent" style="margin-bottom:10px"><div class="row" style="justify-content:space-between"><b>${esc(o.b.n)}</b><span class="note">${o.n===0?"aujourd'hui !":o.n===1?"demain":"dans "+o.n+" j"}</span></div><small class="note">${o.b.n!==KL[o.b.k]?KL[o.b.k||"a"]+" · ":""}${o.d.toLocaleDateString("fr-FR",{day:"numeric",month:"long"})}${o.age&&o.b.k!=="o"?" · "+o.age+(o.b.k==="m"?" ans de mariage":" ans"):""}</small><div class="row" style="margin-top:8px"><button class="sec sm" data-bdel="${o.b.id}">Supprimer</button></div></div>`;
+    const BD=`<div class="sect">Dates qui reviennent chaque année</div><div class="ent" style="margin-bottom:12px"><select id="bty">${Object.entries(KL).map(([k,t])=>`<option value="${k}">${t}</option>`).join("")}</select><input id="bnm" placeholder="Nom (ex. Maman, Paul &amp; Anne, Fête des mères)"><input id="bdt" inputmode="numeric" maxlength="10" placeholder="JJ/MM/AAAA (l'année est facultative)"><div class="row"><button id="bna">Ajouter</button></div><p class="note" id="bne" style="margin-top:6px">Se répète chaque année, sans avoir à remettre la date.</p></div>`+bl.map(brow).join("")+(bl.length?`<div class="row"><button class="sec" id="bics">Recevoir les rappels dans mon calendrier</button></div><p class="note" style="margin:8px 0 18px">Ouvre le fichier avec ton application Calendrier : chaque date s'y répète toute seule, avec un rappel la veille et le jour même (l'heure se règle dans Réglages → Compte et appli). Si tu en ajoutes un nouveau, exporte à nouveau.</p>`:"");
+    const grp=[["En retard",l.filter(o=>o.n<0)],["Dans les 30 jours",l.filter(o=>o.n>=0&&o.n<=30)],["Plus tard",l.filter(o=>o.n>30)]];
+    const row=o=>`<div class="ent" style="margin-bottom:10px"><div class="row" style="justify-content:space-between"><b>${esc(o.i.t)}</b><span class="note">${o.n<0?"dépassée de "+(-o.n)+" j":o.n===0?"aujourd'hui":"dans "+o.n+" j"}</span></div><small class="note">${esc(o.i.c)} · ${fd(new Date(o.i.x+"T12:00:00"))}${o.i.xr?" · ↻ "+(o.i.xr==="1"?"chaque année":"tous les "+o.i.xr+" ans"):""}</small><div class="row" style="margin-top:8px"><button class="sec sm" data-edit="${o.i.id}">Ouvrir</button></div></div>`;
+    app.innerHTML=`<h1>Calendrier</h1>`+BD+`<div class="sect">Échéances</div><p>Papiers et contrats avec une date, du plus urgent au plus lointain.</p>`+(l.length?grp.map(([n,a])=>a.length?`<div class="sect">${n} (${a.length})</div>`+a.map(row).join(""):"").join("")+`<div class="row"><button class="sec" id="icall2">Tout ajouter au calendrier</button></div>`:"<p>Aucune échéance pour l'instant. Ajoute une date dans « Modifier une information ».</p>");
+    app.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>{editId=b.dataset.edit;view="edit";render()});
+    const bty=$("#bty"),bdt=$("#bdt");
+    bdt.oninput=e=>{const v=bdt.value.replace(/\D/g,"").slice(0,8),del=e&&e.inputType==="deleteContentBackward";let o=v.slice(0,2);if(v.length>2||(v.length===2&&!del))o+="/"+v.slice(2,4);if(v.length>4||(v.length===4&&!del))o+="/"+v.slice(4);bdt.value=o};
+    bty.onchange=()=>{const k=bty.value,a=k==="fm"||k==="fp";bdt.disabled=a;bdt.placeholder=a?"Date calculée automatiquement":"JJ/MM/AAAA (l'année est facultative)";bdt.value=KP[k]||""};
+    $("#bna").onclick=async()=>{const k=bty.value,auto=k==="fm"||k==="fp",n=$("#bnm").value.trim()||(k==="a"||k==="m"||k==="o"?"":KL[k]),m=bdt.value.trim().match(/^(\d{1,2})[\/\-. ](\d{1,2})(?:[\/\-. ](\d{4}))?$/);
+      if(!n||(!auto&&(!m||+m[2]<1||+m[2]>12||+m[1]<1||new Date(2000,+m[2]-1,+m[1]).getMonth()!==+m[2]-1))){$("#bne").textContent=!n?"Écris un nom.":"Écris une date valide au format JJ/MM/AAAA.";return}
+      bd.push({id:crypto.randomUUID(),n,d:auto?0:+m[1],m:auto?0:+m[2],y:!auto&&m[3]?+m[3]:null,k});await save();render()};
+    app.querySelectorAll("[data-bdel]").forEach(b=>twoTap(b,"Supprimer",async()=>{bd=bd.filter(x=>x.id!==b.dataset.bdel);await save();render()}));
+    if($("#bics"))$("#bics").onclick=()=>dl("anniversaires.ics","text/calendar",bics());
+    if($("#icall2"))$("#icall2").onclick=()=>dl("echeances.ics","text/calendar",ics(l.map(o=>o.i)));
+    return true;
+  }
+  if(view==="aud"){
+    const exp=items.filter(i=>i.x&&new Date(i.x+"T23:59:59")<Date.now()),old=items.filter(i=>i.m&&Date.now()-i.m>365*864e5&&i.v!=="À compléter"),todo=items.filter(i=>i.v==="À compléter"),dup={};
+    items.forEach(i=>{const k=String(i.v||"").trim().toLowerCase();if(k.length>3&&k!=="à compléter")(dup[k]=dup[k]||[]).push(i)});
+    const dups=Object.values(dup).filter(a=>a.length>1),fr=d=>fd(new Date(d));
+    const sec=(t,a,f)=>a.length?`<div class="sect">${t} (${a.length})</div>`+a.map(i=>`<div class="ent" style="margin-bottom:8px"><div class="row" style="justify-content:space-between"><span>${esc(i.t)}</span><button class="sec sm" data-edit="${i.id}">Ouvrir</button></div><small class="note">${esc(i.c)}${f?f(i):""}</small></div>`).join(""):"";
+    const bad=exp.length+old.length+dups.length+todo.length;
+    app.innerHTML=`${back("Réglages")}<h1 style="margin-top:14px">Contrôle du coffre</h1><p>${bad?"Voici ce qui mérite ton attention.":"Tout est en ordre."}</p>`+sec("Échéances dépassées",exp,i=>" · "+fr(i.x+"T12:00:00"))+sec("À compléter",todo)+sec("Pas modifiées depuis plus d'un an",old,i=>" · "+fr(i.m))+(dups.length?`<div class="sect">Valeurs identiques (${dups.length})</div>`+dups.map(a=>`<div class="ent" style="margin-bottom:8px"><small class="note">Même valeur dans :</small><br>${a.map(i=>`<button class="sec sm" data-edit="${i.id}" style="margin:4px 4px 0 0">${esc(i.t)}</button>`).join("")}</div>`).join(""):"");
+    toSet();
+    app.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>{editId=b.dataset.edit;view="edit";render()});
+    return true;
+  }
   if(view==="stats"){
     const cnt=c=>items.filter(i=>i.c===c).length,mx=Math.max(1,...cats.map(cnt)),old=items.filter(i=>i.d).sort((a,b)=>a.d-b.d)[0];
     const box=(n,l)=>`<div class="ent"><b style="font-size:1.6em">${n}</b><br><small class="note">${l}</small></div>`;
@@ -403,13 +430,13 @@ function xview(app){
     toSet();return true;
   }
   if(view==="set"){
-    const S=(k,l,o)=>`<label class="note">${l}</label><select data-pref="${k}">${o.map(([v,t])=>`<option value="${v}"${String(prefs[k])===String(v)?" selected":""}>${t}</option>`).join("")}</select>`;
+    const S=(k,l,o)=>`<div class="pr"><label class="note">${l}</label><select data-pref="${k}">${o.map(([v,t])=>`<option value="${v}"${String(prefs[k])===String(v)?" selected":""}>${t}</option>`).join("")}</select></div>`;
     const G=(k,t,b)=>`<details class="grp" data-k="${k}"${sopen[k]?" open":""}><summary>${t}</summary>${b}</details>`;
     const YN=[[1,"Oui"],[0,"Non"]],lb=prefs.bk?new Date(prefs.bk).toLocaleDateString("fr-FR"):"jamais";
     const catRows=cats.map((c,k)=>{const n=items.filter(i=>i.c===c).length;
       if(renC===c)return `<div class="row" style="margin-bottom:8px"><input id="rni" value="${esc(c)}" maxlength="24" style="flex:1;margin:0"><button id="rok">OK</button></div>`;
       return `<div class="row" style="margin-bottom:8px"><span style="flex:1;min-width:90px">${esc(c)} <small class="note">(${n})</small></span><button class="sec sm" data-up="${k}" aria-label="Monter">↑</button><button class="sec sm" data-dn="${k}" aria-label="Descendre">↓</button><button class="sec sm" data-rn="${esc(c)}">Renommer</button>${n||cats.length<2?"":`<button class="bad sm" data-dc="${esc(c)}">Suppr.</button>`}</div>`}).join("");
-    app.innerHTML=`<h1>Réglages</h1><p>Tes préférences, enregistrées sur ce téléphone.</p>
+    app.innerHTML=`<h1>Réglages</h1>
     ${G("a","Affichage",
       S("theme","Thème",[["auto","Automatique"],["light","Clair"],["dark","Sombre"]])+
       S("accent","Couleur d'accent",[["brass","Laiton"],["teal","Turquoise"],["rose","Rose"],["green","Vert"],["violet","Violet"]])+
@@ -420,15 +447,17 @@ function xview(app){
       S("sort","Tri des informations",[["az","A → Z"],["za","Z → A"],["new","Plus récentes d'abord"],["old","Plus anciennes d'abord"]])+
       S("recent","Afficher « Récemment modifiés »",YN)+
       S("vib","Vibration au toucher",YN)+
-      `<label class="note">Nom du coffre</label><input data-pt="name" maxlength="24" placeholder="Mon coffre" value="${esc(prefs.name||"")}">`)}
+      `<div class="pr"><label class="note">Nom du coffre</label><input data-pt="name" maxlength="24" placeholder="Mon coffre" value="${esc(prefs.name||"")}"></div>`)}
     ${G("b","Sécurité",
       S("lock","Verrouillage automatique",[[30,"30 secondes"],[60,"1 minute"],[120,"2 minutes"],[300,"5 minutes"],[900,"15 minutes"]])+
       S("leave","Verrouiller en quittant l'appli",YN)+
       S("clip","Vider le presse-papiers après une copie",[[15,"15 secondes"],[30,"30 secondes"],[60,"1 minute"],[0,"Jamais"]])+
-      S("reveal","Durée d'affichage d'une valeur masquée",[[5,"5 secondes"],[10,"10 secondes"],[30,"30 secondes"],[60,"1 minute"]])+`<div class="row" style="margin-top:6px"><button class="sec" id="bio">${bioOn()?"Désactiver":"Activer"} l'empreinte / le visage</button></div><p class="note" id="bioM" style="margin-top:6px">Ouvre le coffre sans taper le mot de passe. Le mot de passe reste toujours possible.</p>`+`<div class="sect">Code court</div>`+(pinOn()?`<button class="sec" id="pind">Désactiver le code court</button>`:`<input id="pn" type="password" inputmode="numeric" maxlength="10" placeholder="Code court (6 à 10 chiffres)"><button class="sec" id="pine">Activer le code court</button><p class="note" style="margin-top:6px">Plus rapide, mais moins sûr que le mot de passe. Désactivé automatiquement après 5 erreurs.</p>`))}
+      S("reveal","Durée d'affichage d'une valeur masquée",[[5,"5 secondes"],[10,"10 secondes"],[30,"30 secondes"],[60,"1 minute"]])+`<div class="sect">Code court</div>`+(pinOn()?`<div class="mnu"><button class="mi" id="pind">Code court activé · Désactiver</button></div>`:`<div class="row" style="margin-top:6px"><input id="pn" type="password" inputmode="numeric" maxlength="10" placeholder="6 à 10 chiffres" style="flex:1;margin:0"><button id="pine">Activer</button></div><p class="note" id="pinM" style="margin-top:6px">Plus rapide, mais moins sûr que le mot de passe. Désactivé automatiquement après 5 erreurs.</p>`))}
     ${G("c","Mes rubriques",catRows+`<div class="row" style="margin-top:6px"><input id="nc2" placeholder="Nouvelle rubrique" maxlength="24" style="flex:1;margin:0"><button id="ac">Ajouter</button></div><p class="note" style="margin-top:6px">Une rubrique ne peut être supprimée que si elle est vide.</p>`)}
-    ${G("d","Outils",`<div class="row"><button class="sec" data-go="trash">Corbeille (${trash.length})</button><button class="sec" data-go="bulk">Ajout en masse</button><button class="sec" id="tpl">Ajouter des modèles à compléter</button><button class="sec" data-go="stats">Statistiques</button><button class="sec" id="icall">Échéances vers le calendrier</button><button class="sec" id="upd">Mettre à jour l'appli</button><button class="sec" data-go="log">Journal d'activité</button><button class="sec" data-go="gen">Générateur de mot de passe</button><button class="sec" data-go="backup">Sauvegarde (dernière : ${lb})</button><button class="sec" data-go="sec">Mot de passe et code de récupération</button><button class="bad" id="rsr">Réinitialiser les réglages</button></div>`)}
-    <p class="note" style="text-align:center;margin-top:24px">Version 8</p>`;
+    ${G("e","Données",`<div class="mnu"><button class="mi" data-go="backup"><span>Sauvegarde<small class="note" style="display:block;font-weight:400;margin-top:2px">Copie chiffrée de ton coffre, pour le retrouver si tu perds ou changes de téléphone · dernière : ${lb}</small></span></button><button class="mi" data-go="trash">Corbeille (${trash.length})</button><button class="mi" data-go="bulk">Ajout en masse</button><button class="mi" id="tpl">Ajouter des modèles à compléter</button><button class="mi" id="icall">Échéances vers le calendrier</button></div>`)}
+    ${G("f","Suivi",`<div class="mnu"><button class="mi" data-go="aud">Contrôle du coffre</button><button class="mi" data-go="stats">Statistiques</button><button class="mi" data-go="log">Journal d'activité</button><button class="mi" data-go="gen">Générateur de mot de passe</button></div>`)}
+    ${G("g","Compte et appli",S("home","Page de démarrage",[["list","Coffre"],["ech","Calendrier"]])+S("banner","Bandeau de rappels sur l'accueil",YN)+S("warnE","Prévenir des échéances",[[7,"7 jours avant"],[15,"15 jours avant"],[30,"30 jours avant"],[60,"60 jours avant"],[90,"90 jours avant"]])+S("warnB","Prévenir des dates annuelles",[[3,"3 jours avant"],[7,"7 jours avant"],[14,"14 jours avant"],[30,"30 jours avant"]])+S("rh","Heure du rappel (calendrier)",[[8,"8 h"],[9,"9 h"],[12,"12 h"],[18,"18 h"]])+S("rv","Rappel aussi la veille",YN)+S("dfmt","Format des dates",[["short","14/03/2026"],["long","14 mars 2026"]])+`<div class="sect">Compte</div><div class="mnu"><button class="mi" data-go="sec">Mot de passe et code de récupération</button><button class="mi" id="upd">Mettre à jour l'appli</button><button class="mi" id="rsr" style="color:var(--bad)">Réinitialiser les réglages</button></div>`)}
+    <p class="note" style="text-align:center;margin-top:24px">Version 16</p>`;
     app.querySelectorAll("details.grp").forEach(d=>d.addEventListener("toggle",()=>{sopen[d.dataset.k]=d.open}));
     app.querySelectorAll("[data-pref]").forEach(e=>e.onchange=()=>{const k=e.dataset.pref;prefs[k]=isNaN(e.value)?e.value:Number(e.value);savePrefs();bump()});
     app.querySelectorAll("[data-pt]").forEach(e=>e.oninput=()=>{prefs[e.dataset.pt]=e.value;savePrefs()});
@@ -438,7 +467,6 @@ function xview(app){
     app.querySelectorAll("[data-rn]").forEach(b=>b.onclick=()=>{renC=b.dataset.rn;render()});
     if($("#rni")){$("#rni").focus();$("#rok").onclick=async()=>{const n=$("#rni").value.trim(),k=cats.indexOf(renC);if(!n||(cats.includes(n)&&n!==renC))return;cats[k]=n;items.concat(trash).forEach(i=>{if(i.c===renC)i.c=n});renC=null;await save();render()}}
     $("#icall").onclick=()=>{const l=items.filter(i=>i.x);if(!l.length){$("#icall").textContent="Aucune échéance";return}dl("echeances.ics","text/calendar",ics(l))};
-    $("#bio").onclick=()=>{if(bioOn()){try{localStorage.removeItem(BK)}catch(e){}render()}else bioEnable()};
     $("#upd").onclick=async()=>{try{const g=await navigator.serviceWorker.getRegistrations();await Promise.all(g.map(x=>x.unregister()));const k=await caches.keys();await Promise.all(k.map(x=>caches.delete(x)))}catch(e){}location.reload()};
     if($("#pine"))$("#pine").onclick=pinEnable;if($("#pind"))$("#pind").onclick=()=>{try{localStorage.removeItem(PK)}catch(e){}render()};
     $("#ac").onclick=async()=>{const n=$("#nc2").value.trim();if(!n||cats.includes(n))return;cats.push(n);await save();render()};
@@ -448,17 +476,17 @@ function xview(app){
   }
   return false;
 }
-function render(){const y=window.scrollY,same=view===lastView&&cat===lastCat;_render();addEyes();addMeters();addNav();lastView=view;lastCat=cat;if(same){try{window.scrollTo(0,y)}catch(e){}}}
+function render(){if(key&&!homed){homed=true;if(prefs.home==="ech")view="ech"}if(key&&rollX())save();const y=window.scrollY,same=view===lastView&&cat===lastCat;_render();addEyes();addMeters();addNav();lastView=view;lastCat=cat;if(same){try{window.scrollTo(0,y)}catch(e){}}}
 function addNav(){
   let n=document.getElementById("nav");
   const show=key&&["list","add","backup","sec",...XV].includes(view);
-  const act={backup:"set",gen:"set",trash:"set",bulk:"set",stats:"set",log:"set",edit:"list",urg:"list"}[view]||view;
+  const act={backup:"set",gen:"set",trash:"set",bulk:"set",stats:"set",log:"set",aud:"set",edit:"list",urg:"list"}[view]||view;
   document.body.classList.toggle("hasnav",!!show);
   if(!show){if(n)n.remove();return}
   $("#app").insertAdjacentHTML("afterbegin",`<header class="bar"><span class="brand">${MINI}${esc(prefs.name||"Mon coffre")}</span><button class="ico" id="lk" aria-label="Verrouiller">${LOCKI}</button></header>`);
   $("#lk").onclick=()=>{vib();lock()};
   if(!n){n=document.createElement("nav");n.id="nav";document.body.appendChild(n)}
-  n.innerHTML=[["list","Coffre",GRID],["sec","Sécurité",SHIELD],["add","Ajouter",PLUS],["set","Réglages",GEAR]].map(([v,l,p])=>`<button class="nb${v===act?" on":""}${v==="add"?" fab":""}" data-v="${v}" aria-label="${l}">${p}<span>${l}</span></button>`).join("");
+  n.innerHTML=[["list","Coffre",GRID],["ech","Calendrier",CAL],["sec","Sécurité",SHIELD],["add","Ajouter",PLUS],["set","Réglages",GEAR]].map(([v,l,p])=>`<button class="nb${v===act?" on":""}${v==="add"?" fab":""}" data-v="${v}" aria-label="${l}">${p}<span>${l}</span></button>`).join("");
   n.querySelectorAll("button").forEach(b=>b.onclick=()=>{view=b.dataset.v;if(view==="list"){cat="Tous";q=""}render()});
 }
 function _render(){
@@ -471,7 +499,7 @@ function _render(){
     <div class="row"><button class="bad" id="go3" disabled>Effacer et recréer</button><button class="sec" id="bk">Retour</button></div>`;
     $("#cf").oninput=()=>{$("#go3").disabled=$("#cf").value.trim().toUpperCase()!=="EFFACER"};
     $("#bk").onclick=()=>{view="list";render()};
-    $("#go3").onclick=()=>{try{localStorage.removeItem(KEY);localStorage.removeItem(BK);localStorage.removeItem(PK)}catch(e){}setF({});fails=0;view="list";render()};
+    $("#go3").onclick=()=>{try{localStorage.removeItem(KEY);localStorage.removeItem(PK)}catch(e){}setF({});fails=0;view="list";render()};
     return;
   }
   if(!key&&view==="reset"){
@@ -543,10 +571,10 @@ function _render(){
     <input id="pw" type="password" autocomplete="off" placeholder="Mot de passe maître">
     ${first?'<input id="pw2" type="password" autocomplete="off" placeholder="Confirme le mot de passe"><p class="note">Au moins 12 caractères. Une phrase de plusieurs mots est idéale.</p>':""}
     <div class="err" id="err" role="alert"></div>
-    <button id="go">${first?"Créer le coffre":"Ouvrir"}</button>${!first&&bioOn()?'<button class="sec" id="bg" style="margin-top:10px">Empreinte / visage</button>':""}${!first&&pinOn()?'<input id="pk" type="password" inputmode="numeric" maxlength="10" placeholder="Code court" style="margin-top:14px"><button class="sec" id="pg">Ouvrir avec le code court</button>':""}
+    <button id="go">${first?"Créer le coffre":"Ouvrir"}</button>${!first&&pinOn()?'<input id="pk" type="password" inputmode="numeric" maxlength="10" placeholder="Code court" style="margin-top:14px"><button class="sec" id="pg">Ouvrir avec le code court</button>':""}
     ${first?"":'<div class="row" style="margin-top:18px"><button class="sec sm" id="fg">Mot de passe oublié ?</button><button class="bad sm" id="wp">Tout perdu ?</button></div><p class="note" style="margin-top:12px">Verrouillage automatique après 1 minute d\'inactivité.</p>'}`;
     $("#go").onclick=()=>first?create():unlock();
-    if($("#bg"))$("#bg").onclick=bioUnlock;if($("#pg"))$("#pg").onclick=pinUnlock;
+    if($("#pg"))$("#pg").onclick=pinUnlock;
     if(!first){$("#fg").onclick=()=>{view="reset";render()};$("#wp").onclick=()=>{view="wipe";render()}}
     $("#pw").focus();
     return;
@@ -558,7 +586,7 @@ function _render(){
     <div class="row" id="sg" style="margin-bottom:12px"></div>
     <input id="t" placeholder="Nom (ex. Numéro de sécu)">
     <textarea id="v" placeholder="Valeur"></textarea>
-    <label class="note">Date d'échéance (facultatif)</label><input id="x" type="date">
+    <label class="note">Date d'échéance (facultatif)</label><input id="x" type="date"><label class="note">Se répète</label><select id="xr">${xrOpts("")}</select>${XRN}
     <div class="row"><button id="ok">Enregistrer</button><button class="sec" id="cx">Annuler</button></div>`;
     const drawSug=()=>{
       const used=items.filter(i=>i.c===$("#c").value).map(i=>i.t);
@@ -571,13 +599,13 @@ function _render(){
     $("#ok").onclick=async()=>{
       const t=$("#t").value.trim(),v=$("#v").value;
       if(!t||!v)return;
-      items.push({id:crypto.randomUUID(),c:$("#c").value,t,v,d:Date.now(),m:Date.now(),x:$("#x").value||""});
+      items.push({id:crypto.randomUUID(),c:$("#c").value,t,v,d:Date.now(),m:Date.now(),x:$("#x").value||"",xr:$("#x").value?$("#xr").value:""});
       await save();view="list";render();
     };
     return;
   }
   if(view==="backup"){
-    app.innerHTML=`<button class="sec sm" id="bkt">‹ Réglages</button><h1 style="margin-top:14px">Sauvegarde</h1>
+    app.innerHTML=`<button class="sec sm" id="bkt">‹ Réglages</button><h1 style="margin-top:14px">Sauvegarde</h1><div class="ent" style="margin-bottom:12px"><b>À quoi sert la sauvegarde ?</b><p class="note" style="margin:6px 0 0">Tout est stocké uniquement sur ce téléphone. La sauvegarde en est une copie chiffrée, illisible sans ton mot de passe maître : garde-la dans un endroit sûr (messagerie, cloud…). Si tu perds ou changes de téléphone, ou si les données du navigateur sont effacées, tu pourras tout retrouver en la restaurant.</p></div>
     <p>La sauvegarde reste chiffrée : sans ton mot de passe maître, elle est illisible. Copie-la dans un endroit sûr. Restaurer ajoute les informations manquantes à ton coffre : rien n'est remplacé ni effacé.</p>
     <button id="ex">Afficher la sauvegarde chiffrée</button>
     <textarea id="bl" placeholder="Sauvegarde chiffrée" style="margin-top:12px"></textarea>
@@ -594,10 +622,10 @@ function _render(){
     $("#im").onclick=async()=>{
       const pw=$("#ip").value;
       if(!pw){$("#err").textContent="Entre le mot de passe maître de cette sauvegarde.";return}
-      const kc=cats,kt=trash,kl=log;
+      const kc=cats,kt=trash,kl=log,kb=bd;
       try{
         const r=await openBlob($("#bl").value.trim(),pw,"pw");
-        const bc=cats,bt=trash;cats=kc;trash=kt;log=kl;
+        const bc=cats,bt=trash,bb=bd;cats=kc;trash=kt;log=kl;bd=kb;bb.forEach(b=>{if(!bd.some(x=>x.id===b.id))bd.push(b)});
         const ids=new Set(items.map(i=>i.id)),add=r.items.filter(i=>!ids.has(i.id));
         items.push(...add);
         bc.forEach(c=>{if(!cats.includes(c))cats.push(c)});
@@ -605,7 +633,7 @@ function _render(){
         await save();
         $("#err").style.color="var(--ink)";
         $("#err").textContent=add.length+" information"+(add.length>1?"s":"")+" ajoutée"+(add.length>1?"s":"")+". Rien n'a été remplacé.";
-      }catch(e){cats=kc;trash=kt;log=kl;$("#err").style.color="";$("#err").textContent="Restauration impossible : texte ou mot de passe incorrect."}
+      }catch(e){cats=kc;trash=kt;log=kl;bd=kb;$("#err").style.color="";$("#err").textContent="Restauration impossible : texte ou mot de passe incorrect."}
     };
     return;
   }
