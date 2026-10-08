@@ -90,6 +90,9 @@ input[type=search]{margin-bottom:14px}
 .mnu .mi:first-child{border-top:0}
 details.grp{padding:0 16px 4px}
 details.grp summary{padding:14px 0}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:1.5px solid var(--line);border-radius:12px;font-size:14px}
+.chip a{cursor:pointer;color:var(--bad);font-weight:700}
+.fld{border-top:1px solid var(--line);padding:8px 0}
 </style>
 </head>
 <body>
@@ -97,7 +100,7 @@ details.grp summary{padding:14px 0}
 <script>
 const CATS=["Identité","Santé","Contacts","Documents","Finances","Notes"];
 let cats=CATS.slice();
-const PD={home:"list",banner:1,warnE:30,warnB:7,rh:9,rv:1,dfmt:"short",theme:"auto",accent:"brass",lock:60,leave:1,clip:30,reveal:10,mask:1,size:16,sort:"az",dense:0,layout:"grid",recent:1,vib:1,wipe:0,name:"",bk:0};
+const PD={fFields:1,fAtt:1,fHist:1,fLinks:1,fTags:1,fTrip:1,fShare:1,fCsv:1,clipLock:1,tripOn:0,trip:[],home:"list",banner:1,warnE:30,warnB:7,rh:9,rv:1,dfmt:"short",theme:"auto",accent:"brass",lock:60,leave:1,clip:30,reveal:10,mask:1,size:16,sort:"az",dense:0,layout:"grid",recent:1,vib:1,wipe:0,name:"",bk:0};
 let prefs=Object.assign({},PD);try{Object.assign(prefs,JSON.parse(localStorage.getItem("coffre_prefs")||"{}"))}catch(e){}
 const AC={brass:["#a06c14","#e0b04f"],teal:["#0d7a73","#4fd1c5"],rose:["#b5385a","#f27ba0"],green:["#3a7d2c","#8fd16f"],violet:["#6a48c9","#a99bff"]};
 function applyPrefs(){
@@ -113,7 +116,7 @@ const getF=()=>{try{return JSON.parse(localStorage.getItem("coffre_f")||"{}")}ca
 const setF=o=>{try{localStorage.setItem("coffre_f",JSON.stringify(o))}catch(e){}};
 const vib=()=>{try{if(prefs.vib&&navigator.vibrate)navigator.vibrate(15)}catch(e){}};
 function savePrefs(){try{localStorage.setItem("coffre_prefs",JSON.stringify(prefs))}catch(e){}applyPrefs()}
-function pdata(pt){const d=JSON.parse(dec.decode(pt));if(Array.isArray(d)){cats=CATS.slice();trash=[];log=[];bd=[];return d}cats=d.cats&&d.cats.length?d.cats:CATS.slice();trash=(d.trash||[]).filter(t=>Date.now()-t.dt<2592e6);log=d.log||[];bd=d.bd||[];return d.items||[]}
+function pdata(pt){const d=JSON.parse(dec.decode(pt));if(Array.isArray(d)){cats=CATS.slice();trash=[];log=[];bd=[];devs=[];return d}cats=d.cats&&d.cats.length?d.cats:CATS.slice();trash=(d.trash||[]).filter(t=>Date.now()-t.dt<2592e6);log=d.log||[];bd=d.bd||[];devs=d.devs||[];return d.items||[]}
 const SUG={
 "Identité":["Nom complet","Nom de naissance","Date de naissance","Lieu de naissance","Nationalité","Adresse actuelle","Numéro de sécurité sociale","Carte d'identité (n° + expiration)","Passeport (n° + expiration)","Permis de conduire (n° + expiration)","Titre de séjour","Téléphone","E-mail principal","Plaque d'immatriculation","Numéro de carte grise"],
 "Santé":["Groupe sanguin","Allergies","Maladies / traitements en cours","Médecin traitant","Mutuelle (n° adhérent)","Numéro de carte Vitale","Vaccins et rappels","Médicaments réguliers","Correction lunettes"],
@@ -124,7 +127,7 @@ const SUG={
 };
 const KEY="coffre_v1";
 const enc=new TextEncoder(),dec=new TextDecoder();
-let q="",editId=null,bd=[],homed=false,trash=[],log=[],warnF=null,renC=null,sopen={a:true},lastView="",lastCat="";
+let q="",editId=null,attId=null,hl=null,pendAtt=[],rmAtt=[],tmpFl=[],tmpLk=[],attUrls=[],cleaned=false,shareId=null,redrawFl=()=>{},devs=[],bd=[],homed=false,trash=[],log=[],warnF=null,renC=null,sopen={a:true},lastView="",lastCat="";
 let key=null,dek=null,meta=null,pendingCode=null,items=[],cat="Tous",shown=null,timer=null,fails=0,view="list",msg="";
 
 const $=s=>document.querySelector(s);
@@ -155,7 +158,7 @@ async function unwrap(secret,it,w){
 const dkey=raw=>crypto.subtle.importKey("raw",raw,"AES-GCM",false,["encrypt","decrypt"]);
 async function seal(){
   const iv=rnd(12);
-  const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(JSON.stringify({items,cats,trash,log,bd})));
+  const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode(JSON.stringify({items,cats,trash,log,bd,devs})));
   return JSON.stringify({v:2,pw:meta.pw,rc:meta.rc,i:b64(iv),d:b64(ct)});
 }
 async function openBlob(blob,secret,mode){
@@ -179,7 +182,7 @@ async function setupKeys(pw,list){
 async function rotateCode(){const c=newCode();meta.rc=await wrap(c,ITR,dek);await save();return c}
 async function save(){if(!store(await seal()))msg="Enregistrement impossible : le stockage du navigateur est bloqué."}
 
-function lock(){bd=[];homed=false;cats=CATS.slice();trash=[];log=[];renC=null;q="";key=null;dek=null;meta=null;pendingCode=null;items=[];shown=null;view="list";render()}
+function lock(){if(prefs.clipLock){try{navigator.clipboard.writeText("").catch(()=>{})}catch(e){}}attUrls.forEach(u=>URL.revokeObjectURL(u));attUrls=[];cleaned=false;devs=[];bd=[];homed=false;cats=CATS.slice();trash=[];log=[];renC=null;q="";key=null;dek=null;meta=null;pendingCode=null;items=[];shown=null;view="list";render()}
 let idle;
 function bump(){clearTimeout(idle);if(key&&!pendingCode)idle=setTimeout(lock,prefs.lock*1000)}
 ["click","keydown","touchstart"].forEach(e=>document.addEventListener(e,bump,{passive:true}));
@@ -236,13 +239,13 @@ async function openWithDek(raw){
   const o=JSON.parse(load()),dk=await dkey(raw);
   const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:ub(o.i)},dk,ub(o.d));
   dek=raw;key=dk;items=pdata(pt);meta={pw:o.pw,rc:o.rc};fails=0;msg="";
-  const f=getF();if(f.n)warnF=f;setF({});log.unshift({t:Date.now()});log=log.slice(0,10);await save();bump();render();
+  noteUnlock("pin");await save();bump();render();
 }
 async function pinEnable(){
   const v=$("#pn").value,m=$("#pinM");
   if(!/^\d{6,10}$/.test(v)){m.textContent="Le code court doit faire 6 à 10 chiffres.";return}
   m.textContent="Chiffrement en cours…";
-  try{localStorage.setItem(PK,JSON.stringify({w:await wrap(v,ITP,dek),n:0}));render()}catch(e){m.textContent="Activation impossible."}
+  try{localStorage.setItem(PK,JSON.stringify({w:await wrap(v,ITP,dek),n:0}));addLog({k:"pin+"});await save();render()}catch(e){m.textContent="Activation impossible."}
 }
 async function pinUnlock(){
   const e=$("#err"),v=$("#pk").value;if(!v)return;
@@ -250,7 +253,7 @@ async function pinUnlock(){
   e.textContent="Vérification…";
   try{await openWithDek(await unwrap(v,ITP,p.w))}
   catch(x){
-    p.n=(p.n||0)+1;const left=5-p.n;
+    p.n=(p.n||0)+1;const left=5-p.n;{const g=getF();g.n=(g.n||0)+1;g.t=Date.now();if(left<=0)g.pinoff=1;setF(g)}
     if(left<=0){try{localStorage.removeItem(PK)}catch(y){}render();$("#err").textContent="Trop d'essais : le code court est désactivé. Utilise ton mot de passe."}
     else{try{localStorage.setItem(PK,JSON.stringify(p))}catch(y){}e.textContent="Code court incorrect ("+left+" essai"+(left>1?"s":"")+" restant"+(left>1?"s":"")+")."}
   }
@@ -264,22 +267,130 @@ const nextB=b=>{const t0=new Date().setHours(0,0,0,0),Y=new Date().getFullYear()
 const bics=()=>{const n=new Date().toISOString().replace(/[-:]|\.\d+/g,""),z=x=>String(x).padStart(2,"0"),f=x=>x.getUTCFullYear()+z(x.getUTCMonth()+1)+z(x.getUTCDate());
   return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Mon coffre//FR\r\n"+bd.map(b=>{const x0=(b.k==="fm"||b.k==="fp")?fday(new Date().getFullYear(),b.k):null,d=x0?new Date(Date.UTC(x0.getFullYear(),x0.getMonth(),x0.getDate(),12)):new Date(Date.UTC(b.y||2000,b.m-1,b.d,12)),e=new Date(d.getTime()+864e5);
     return "BEGIN:VEVENT\r\nUID:bd-"+b.id+"@coffre\r\nDTSTAMP:"+n+"\r\nDTSTART;VALUE=DATE:"+f(d)+"\r\nDTEND;VALUE=DATE:"+f(e)+"\r\nRRULE:"+({fm:"FREQ=YEARLY;BYMONTH=5;BYDAY=-1SU",fp:"FREQ=YEARLY;BYMONTH=6;BYDAY=3SU"}[b.k]||"FREQ=YEARLY")+"\r\nSUMMARY:"+bsum(b).replace(/[\\;,\n]/g," ")+"\r\nTRANSP:TRANSPARENT"+(prefs.rv?"\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Rappel : demain\r\nTRIGGER:-PT"+(24-prefs.rh)+"H\r\nEND:VALARM":"")+"\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Rappel : aujourd'hui\r\nTRIGGER:PT"+prefs.rh+"H\r\nEND:VALARM\r\nEND:VEVENT\r\n"}).join("")+"END:VCALENDAR\r\n"};
-const xrOpts=v=>[["","Ne se répète pas"],["1","Chaque année"],["2","Tous les 2 ans"],["5","Tous les 5 ans"]].map(([a,t])=>`<option value="${a}"${(v||"")===a?" selected":""}>${t}</option>`).join("");
+const xrOpts=v=>[["","Ne se répète pas"],["m1","Chaque mois"],["m3","Tous les 3 mois"],["m6","Tous les 6 mois"],["1","Chaque année"],["2","Tous les 2 ans"],["5","Tous les 5 ans"]].map(([a,t])=>`<option value="${a}"${(v||"")===a?" selected":""}>${t}</option>`).join("");
 const XRN='<p class="note" style="margin-top:6px">Si tu choisis une répétition, la date avance toute seule à la prochaine échéance une fois passée.</p>';
-function rollX(){let ch=false;const t=new Date().toISOString().slice(0,10);items.forEach(i=>{if(i.x&&i.xr){let g=0;while(i.x<t&&g++<200){const d=new Date(i.x+"T12:00:00");d.setFullYear(d.getFullYear()+(+i.xr));i.x=d.toISOString().slice(0,10);ch=true}}});return ch}
-const XV=["set","gen","edit","urg","trash","bulk","stats","log","ech","aud"];
-function extraTop(){
+function rollX(){let ch=false;const t=new Date().toISOString().slice(0,10);items.forEach(i=>{if(i.x&&i.xr){let g=0;while(i.x<t&&g++<200){const d=new Date(i.x+"T12:00:00");String(i.xr)[0]==="m"?d.setMonth(d.getMonth()+(+String(i.xr).slice(1))):d.setFullYear(d.getFullYear()+(+i.xr));i.x=d.toISOString().slice(0,10);ch=true}}});return ch}
+const XV=["set","gen","edit","urg","trash","bulk","stats","log","ech","aud","att","share","recv","csv"];
+const vis=i=>!(prefs.fTrip&&prefs.tripOn)||(prefs.trip||[]).includes(i.c)||i.u;
+const IT=()=>items.filter(vis);
+const catsV=()=>(prefs.fTrip&&prefs.tripOn)?cats.filter(c=>(prefs.trip||[]).includes(c)):cats;
+const extraText=i=>(prefs.fFields?(i.fl||[]).map(f=>f.k+" "+f.v).join(" "):"")+" "+(prefs.fTags?(i.tg||[]).map(t=>"#"+t).join(" "):"");
+const linked=i=>items.filter(x=>x.id!==i.id&&((i.lk||[]).includes(x.id)||(x.lk||[]).includes(i.id)));
+const fmtSize=n=>n>1048576?(n/1048576).toFixed(1)+" Mo":Math.max(1,Math.round(n/1024))+" Ko";
+const hasDB=()=>{try{return !!window.indexedDB}catch(e){return false}};
+const DBO=()=>new Promise((res,rej)=>{const r=indexedDB.open("coffre_att",1);r.onupgradeneeded=()=>r.result.createObjectStore("a",{keyPath:"id"});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+const dbp=(m,fn)=>DBO().then(db=>new Promise((res,rej)=>{const t=db.transaction("a",m),r=fn(t.objectStore("a"));t.oncomplete=()=>{db.close();res(r&&r.result)};t.onerror=()=>rej(t.error)}));
+async function attPut(id,buf){const iv=rnd(12),ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,buf);await dbp("readwrite",s=>s.put({id,iv,d:ct}))}
+async function attGet(id){const r=await dbp("readonly",s=>s.get(id));return crypto.subtle.decrypt({name:"AES-GCM",iv:r.iv},key,r.d)}
+const attDel=id=>dbp("readwrite",s=>s.delete(id)).catch(()=>{});
+async function attClean(){try{const ks=await dbp("readonly",s=>s.getAllKeys()),used=new Set(items.concat(trash).flatMap(i=>(i.at||[]).map(a=>a.id)));for(const k of ks)if(!used.has(k))await attDel(k)}catch(e){}}
+async function shrink(f){
+  if(!f.type.startsWith("image/"))return {buf:await f.arrayBuffer(),t:f.type||"application/octet-stream"};
+  const url=URL.createObjectURL(f);
+  try{
+    const img=await new Promise((r,j)=>{const i=new Image();i.onload=()=>r(i);i.onerror=j;i.src=url});
+    const k=Math.min(1,1400/Math.max(img.width,img.height)),c=document.createElement("canvas");
+    c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    const b=await new Promise(r=>c.toBlob(r,"image/jpeg",.82));return {buf:await b.arrayBuffer(),t:"image/jpeg"};
+  }finally{URL.revokeObjectURL(url)}
+}
+async function commitAtt(it){
+  it.at=(it.at||[]).filter(a=>!rmAtt.includes(a.id));
+  for(const id of rmAtt)await attDel(id);
+  for(const f of pendAtt){const s=await shrink(f),id=crypto.randomUUID();await attPut(id,s.buf);it.at.push({id,n:f.name,t:s.t,s:s.buf.byteLength})}
+  pendAtt=[];rmAtt=[];
+}
+function parseCSV(t){
+  const first=t.split("\n")[0],d=[",",";","\t"].map(c=>[c,first.split(c).length]).sort((a,b)=>b[1]-a[1])[0][0],rows=[];
+  let r=[],f="",inq=false;
+  for(let k=0;k<t.length;k++){
+    const c=t[k];
+    if(inq){if(c==='"'){if(t[k+1]==='"'){f+='"';k++}else inq=false}else f+=c}
+    else if(c==='"')inq=true;
+    else if(c===d){r.push(f);f=""}
+    else if(c==="\n"||c==="\r"){if(c==="\r"&&t[k+1]==="\n")k++;r.push(f);f="";if(r.some(x=>x!==""))rows.push(r);r=[]}
+    else f+=c;
+  }
+  if(f!==""||r.length){r.push(f);if(r.some(x=>x!==""))rows.push(r)}
+  return rows;
+}
+function formExtra(it){
   let h="";
+  if(prefs.fFields)h+=`<div class="sect">Champs supplémentaires</div><div id="flb"></div><button class="sec sm" type="button" id="fla">+ Ajouter un champ</button>`;
+  if(prefs.fTags)h+=`<label class="note" style="display:block;margin-top:12px">Étiquettes (séparées par des virgules)</label><input id="tg" placeholder="voyage, famille" value="${esc((it.tg||[]).join(", "))}">`;
+  if(prefs.fLinks&&items.some(x=>x.id!==it.id))h+=`<div class="sect">Liens</div><div id="lkb" class="row" style="margin-bottom:8px"></div><select id="lks"><option value="">Lier à une information…</option>${items.filter(x=>x.id!==it.id).sort(SORTS.az).map(x=>`<option value="${x.id}">${esc(x.t)} · ${esc(x.c)}</option>`).join("")}</select>`;
+  if(prefs.fAtt&&hasDB())h+=`<div class="sect">Pièces jointes</div><div id="atb"></div><input id="atf" type="file" accept="image/*,application/pdf" multiple><p class="note">Photo, scan ou PDF, chiffrés sur ce téléphone. Ils ne sont pas inclus dans la sauvegarde texte.</p>`;
+  return h;
+}
+const histHtml=it=>prefs.fHist&&(it.h||[]).length?`<div class="sect">Historique</div>${it.h.map((h,n)=>`<div class="row" style="margin-bottom:6px"><span style="flex:1;min-width:0"><small class="note">${new Date(h.t).toLocaleDateString("fr-FR")}</small><br>${esc(h.v)}</span><button class="sec sm" type="button" data-hr="${n}">Remettre</button></div>`).join("")}`:"";
+function bindExtra(it){
+  tmpFl=(it.fl||[]).map(f=>({k:f.k,v:f.v}));tmpLk=(it.lk||[]).slice();pendAtt=[];rmAtt=[];
+  const dFl=()=>{const b=$("#flb");if(!b)return;
+    b.innerHTML=tmpFl.map((f,n)=>`<div class="row" style="margin-bottom:8px"><input data-fk="${n}" placeholder="Nom (ex. Expiration)" value="${esc(f.k)}" style="flex:1;min-width:110px;margin:0"><input data-fv="${n}" placeholder="Valeur" value="${esc(f.v)}" style="flex:1.4;min-width:110px;margin:0"><button class="bad sm" type="button" data-fx="${n}" aria-label="Retirer">×</button></div>`).join("");
+    b.querySelectorAll("[data-fk]").forEach(e=>e.oninput=()=>{tmpFl[+e.dataset.fk].k=e.value});
+    b.querySelectorAll("[data-fv]").forEach(e=>e.oninput=()=>{tmpFl[+e.dataset.fv].v=e.value});
+    b.querySelectorAll("[data-fx]").forEach(e=>e.onclick=()=>{tmpFl.splice(+e.dataset.fx,1);dFl()})};
+  redrawFl=dFl;
+  if($("#fla")){$("#fla").onclick=()=>{tmpFl.push({k:"",v:""});dFl()};dFl()}
+  const dLk=()=>{const b=$("#lkb");if(!b)return;
+    b.innerHTML=tmpLk.map(id=>{const x=items.find(y=>y.id===id);return x?`<span class="chip">${esc(x.t)} <a data-lx="${id}" role="button" aria-label="Retirer">×</a></span>`:""}).join("");
+    b.querySelectorAll("[data-lx]").forEach(e=>e.onclick=()=>{tmpLk=tmpLk.filter(z=>z!==e.dataset.lx);dLk()})};
+  if($("#lks")){$("#lks").onchange=()=>{const v=$("#lks").value;if(v&&!tmpLk.includes(v))tmpLk.push(v);$("#lks").value="";dLk()};dLk()}
+  const dAt=()=>{const b=$("#atb");if(!b)return;
+    const ex=(it.at||[]).filter(a=>!rmAtt.includes(a.id));
+    b.innerHTML=ex.map(a=>`<div class="row" style="margin-bottom:6px"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(a.n)} <small class="note">${fmtSize(a.s)}</small></span><button class="bad sm" type="button" data-ax="${a.id}">Retirer</button></div>`).join("")+pendAtt.map((f,n)=>`<div class="row" style="margin-bottom:6px"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(f.name)} <small class="note">à enregistrer</small></span><button class="sec sm" type="button" data-ap="${n}">×</button></div>`).join("");
+    b.querySelectorAll("[data-ax]").forEach(e=>e.onclick=()=>{rmAtt.push(e.dataset.ax);dAt()});
+    b.querySelectorAll("[data-ap]").forEach(e=>e.onclick=()=>{pendAtt.splice(+e.dataset.ap,1);dAt()})};
+  if($("#atf")){$("#atf").onchange=()=>{[...$("#atf").files].forEach(f=>{if(!f.type.startsWith("image/")&&f.size>3145728)return;pendAtt.push(f)});$("#atf").value="";dAt()};dAt()}
+}
+function readExtra(){
+  const o={};
+  if(prefs.fFields)o.fl=tmpFl.filter(f=>f.k.trim()||f.v.trim()).map(f=>({k:f.k.trim(),v:f.v}));
+  if(prefs.fTags&&$("#tg"))o.tg=$("#tg").value.split(",").map(s=>s.trim().replace(/^#/,"")).filter(Boolean);
+  if(prefs.fLinks&&$("#lks"))o.lk=tmpLk.slice();
+  return o;
+}
+const tripBanner=()=>prefs.fTrip&&prefs.tripOn?`<div class="ent" style="margin-bottom:12px"><b>Mode voyage actif</b><p class="note" style="margin:4px 0 0">Seules ${(prefs.trip||[]).length} rubrique(s) sont visibles. Rien n'est supprimé.</p></div>`:"";
+const tagBar=()=>{if(!prefs.fTags)return "";const t=[...new Set(IT().flatMap(i=>i.tg||[]))].sort();return t.length?`<div class="row" style="margin-bottom:10px">${t.slice(0,14).map(x=>`<button class="sec sm" data-q="#${esc(x)}">#${esc(x)}</button>`).join("")}</div>`:""};
+const devId=()=>{try{let i=localStorage.getItem("coffre_dev");if(!i){i=crypto.randomUUID();localStorage.setItem("coffre_dev",i)}return i}catch(e){return "?"}};
+const devName=()=>{const u=navigator.userAgent||"",m=u.match(/Android[^;)]*;\s*([^;)]+)/),b=/Edg\//.test(u)?"Edge":/OPR\//.test(u)?"Opera":/Firefox\//.test(u)?"Firefox":/Chrome\//.test(u)?"Chrome":/Safari\//.test(u)?"Safari":"Navigateur";return (m?m[1].trim():/iPhone|iPad/.test(u)?"iPhone/iPad":/Windows/.test(u)?"Windows":/Macintosh/.test(u)?"Mac":/Android/.test(u)?"Android":"Appareil")+" · "+b};
+function addLog(o){log.unshift(Object.assign({t:Date.now(),dev:devId()},o));log=log.slice(0,80)}
+function noteUnlock(m){
+  const id=devId(),now=Date.now(),f=getF();let dv=devs.find(x=>x.id===id),nd=false;
+  if(!dv){nd=devs.length>0;devs.push(dv={id,n:devName(),f:now,l:now,u:nd?1:0})}else dv.l=now;
+  if(f.n){warnF=f;addLog({t:f.t,k:"fail",n:f.n,s:f.n>=3?1:0})}
+  if(f.pinoff)addLog({t:f.t,k:"pinoff",s:1});
+  addLog({k:"unlock",m});
+  if(nd)addLog({k:"newdev",s:1,x:dv.n});
+  setF({});fails=0;msg="";
+}
+function addGen(){
+  [["#pw","#pw2"],["#n1","#n2"]].forEach(([a,c])=>{
+    const i1=$(a),i2=$(c);if(!i1||!i2)return;
+    const w=i2.closest(".pwwrap")||i2,box=document.createElement("div");
+    box.innerHTML='<button type="button" class="sec sm">Générer un mot de passe solide</button><p class="note" style="margin:6px 0 10px"></p>';
+    w.after(box);
+    box.querySelector("button").onclick=()=>{
+      const A="abcdefghijkmnpqrstuvwxyz23456789";let o="";while(o.length<20){const r=rnd(1)[0];if(r<224)o+=A[r%32]}
+      const p=[0,4,8,12,16].map(k=>o.slice(k,k+4)).join("-");
+      [i1,i2].forEach(x=>{x.type="text";x.value=p;x.dispatchEvent(new Event("input"))});
+      box.querySelector("p").textContent="Note-le sur papier avant de continuer : il ne sera plus affiché ensuite.";
+    };
+  });
+}
+function extraTop(){
+  let h="";const sus=log.filter(l=>l.s&&!l.a).length;
+  if(sus)h+=`<div class="ent" style="border-color:var(--bad);margin-bottom:12px"><b>Activité à vérifier (${sus})</b><p class="note" style="margin:4px 0 10px">Le journal de sécurité a repéré quelque chose d'inhabituel.</p><button class="sm" data-go="log">Ouvrir le journal</button></div>`;
   if(warnF)h+=`<div class="ent" style="border-color:var(--bad);margin-bottom:12px"><b>Tentatives de connexion échouées</b><p class="note" style="margin:4px 0 10px">${warnF.n} essai${warnF.n>1?"s":""} raté${warnF.n>1?"s":""} depuis ta dernière ouverture (dernier le ${new Date(warnF.t).toLocaleString("fr-FR")}).</p><button class="sm" data-dw="1">Compris</button></div>`;
   const bs=bd.map(b=>({b,...nextB(b)})).filter(o=>o.n<=prefs.warnB).sort((a,c)=>a.n-c.n);if(prefs.banner&&bs.length)h+=`<div class="ent" style="margin-bottom:12px"><b>Dates à venir</b><p class="note" style="margin:4px 0 10px">${bs.map(o=>esc(o.b.n)+" ("+(o.n===0?"aujourd'hui":o.n===1?"demain":"dans "+o.n+" j")+")").join(", ")}</p><button class="sec sm" data-go="ech">Ouvrir le calendrier</button></div>`;
   const soon=items.filter(i=>i.x&&new Date(i.x+"T23:59:59")-Date.now()<prefs.warnE*864e5).length;if(prefs.banner&&soon)h+=`<div class="ent" style="margin-bottom:12px"><b>${soon} échéance${soon>1?"s":""} à surveiller</b><p class="note" style="margin:4px 0 10px">Dépassée${soon>1?"s":""} ou dans les ${prefs.warnE} prochains jours.</p><button class="sec sm" data-go="ech">Voir les échéances</button></div>`;
   const todo=items.filter(i=>i.v==="À compléter").length;
   if(todo)h+=`<div class="ent" style="margin-bottom:12px"><b>${todo} information${todo>1?"s":""} à compléter</b><div class="row" style="margin-top:8px"><button class="sec sm" data-q="À compléter">Voir la liste</button></div></div>`;
-  return h+`<div class="row" style="margin-bottom:10px"><button class="sec sm" data-go="urg">Mode urgence</button></div>`;
+  return h+`<div class="row" style="margin-bottom:10px"><button class="sec sm" data-go="urg">Mode urgence</button>${prefs.fTrip?`<button class="sec sm" data-trip="1">${prefs.tripOn?"Quitter le mode voyage":"Mode voyage"}</button>`:""}</div>`;
 }
 function recentHtml(){
   if(!prefs.recent)return "";
-  const r=items.filter(i=>i.m).sort((a,b)=>b.m-a.m).slice(0,3);
+  const r=IT().filter(i=>i.m).sort((a,b)=>b.m-a.m).slice(0,3);
   return r.length?`<div class="sect">Récemment modifiés</div>`+r.map(entryCard).join(""):"";
 }
 function score(p){let v=0;if(p.length>=12)v++;if(p.length>=16)v++;if(/[a-z]/.test(p)&&/[A-Z]/.test(p))v++;if(/\d/.test(p))v++;if(/[^A-Za-z0-9]/.test(p))v++;if(new Set(p).size<5)v=Math.min(v,1);return Math.min(v,4)}
@@ -293,10 +404,13 @@ function addMeters(){
     inp.addEventListener("input",up);up();
   });
 }function entryCard(i){
-  const e=exp(i),vis=!prefs.mask||shown===i.id;
-  return `<div class="ent"><div class="eh"><span class="badge">${ci(i.c)}</span><div style="flex:1;min-width:0"><b>${esc(i.t)}</b><br><small class="note">${esc(i.c)}${i.v==="À compléter"?` · <span style="color:var(--bad)">À compléter</span>`:""}${i.u?` · <span style="color:var(--brass)">Urgence</span>`:""}${e?` · <span style="color:${e.col}">${e.t}</span>`:""}</small></div><button class="ico" data-fav="${i.id}" aria-label="Favori" style="color:${i.f?"var(--brass)":"var(--mute)"}">${i.f?"★":"☆"}</button></div>
-  <div class="val">${vis?esc(i.v):"••••••••••"}</div>
-  <div class="row">${prefs.mask?`<button class="sec sm" data-show="${i.id}">${shown===i.id?"Masquer":"Afficher"}</button>`:""}<button class="sec sm" data-copy="${i.id}">Copier</button><button class="sec sm" data-edit="${i.id}">Modifier</button><button class="bad sm" data-del="${i.id}">Supprimer</button></div></div>`;
+  const e=exp(i),vis=!prefs.mask||shown===i.id,ls=prefs.fLinks?linked(i):[],na=prefs.fAtt?(i.at||[]).length:0;
+  const flh=prefs.fFields?(i.fl||[]).map((f,n)=>`<div class="fld"><small class="note">${esc(f.k)}</small><div class="val" style="margin:2px 0 6px">${vis?esc(f.v):"••••••••••"}</div><button class="sec sm" data-copyf="${i.id}:${n}">Copier</button></div>`).join(""):"";
+  const tg=prefs.fTags&&(i.tg||[]).length?`<div class="row" style="margin:6px 0">${i.tg.map(t=>`<button class="sec sm" data-q="#${esc(t)}">#${esc(t)}</button>`).join("")}</div>`:"";
+  const lk=ls.length?`<div class="row" style="margin:6px 0"><small class="note">Lié :</small>${ls.map(x=>`<button class="sec sm" data-jump="${x.id}">${esc(x.t)}</button>`).join("")}</div>`:"";
+  return `<div class="ent" id="e-${i.id}"${hl===i.id?' style="outline:3px solid var(--brass)"':""}><div class="eh"><span class="badge">${ci(i.c)}</span><div style="flex:1;min-width:0"><b>${esc(i.t)}</b><br><small class="note">${esc(i.c)}${i.v==="À compléter"?` · <span style="color:var(--bad)">À compléter</span>`:""}${i.u?` · <span style="color:var(--brass)">Urgence</span>`:""}${e?` · <span style="color:${e.col}">${e.t}</span>`:""}</small></div><button class="ico" data-fav="${i.id}" aria-label="Favori" style="color:${i.f?"var(--brass)":"var(--mute)"}">${i.f?"★":"☆"}</button></div>
+  <div class="val">${vis?esc(i.v):"••••••••••"}</div>${flh}${tg}${lk}
+  <div class="row">${prefs.mask?`<button class="sec sm" data-show="${i.id}">${shown===i.id?"Masquer":"Afficher"}</button>`:""}<button class="sec sm" data-copy="${i.id}">Copier</button>${na?`<button class="sec sm" data-att="${i.id}">Pièces jointes (${na})</button>`:""}<button class="sec sm" data-edit="${i.id}">Modifier</button><button class="bad sm" data-del="${i.id}">Supprimer</button></div></div>`;
 }
 function bindEnt(box){
   box.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{cat=b.dataset.cat;render()});
@@ -310,6 +424,10 @@ function bindEnt(box){
     try{await navigator.clipboard.writeText(it.v);vib();b.textContent="Copié";if(prefs.clip)setTimeout(()=>navigator.clipboard.writeText("").catch(()=>{}),prefs.clip*1000)}catch(e){b.textContent="Échec"}
   });
   box.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>{q=b.dataset.q;render()});
+  box.querySelectorAll("[data-copyf]").forEach(b=>b.onclick=async()=>{const [id,n]=b.dataset.copyf.split(":"),it=items.find(x=>x.id===id);try{await navigator.clipboard.writeText(it.fl[+n].v);vib();b.textContent="Copié";if(prefs.clip)setTimeout(()=>navigator.clipboard.writeText("").catch(()=>{}),prefs.clip*1000)}catch(e){b.textContent="Échec"}});
+  box.querySelectorAll("[data-jump]").forEach(b=>b.onclick=()=>{const x=items.find(y=>y.id===b.dataset.jump);if(!x)return;cat=x.c;q="";hl=x.id;view="list";render()});
+  box.querySelectorAll("[data-att]").forEach(b=>b.onclick=()=>{attId=b.dataset.att;view="att";render()});
+  box.querySelectorAll("[data-trip]").forEach(b=>b.onclick=()=>{if(!prefs.tripOn&&!(prefs.trip||[]).length){view="set";sopen.h=true;render();return}prefs.tripOn=prefs.tripOn?0:1;savePrefs();render()});
   box.querySelectorAll("[data-dw]").forEach(b=>b.onclick=()=>{warnF=null;render()});
   box.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>{editId=b.dataset.edit;view="edit";render()});
   box.querySelectorAll("[data-fav]").forEach(b=>b.onclick=async()=>{const it=items.find(x=>x.id===b.dataset.fav);vib();it.f=!it.f;await save();render()});
@@ -326,11 +444,94 @@ function xview(app){
     <input id="t" value="${esc(it.t)}"><textarea id="v">${esc(it.v)}</textarea>
     <label class="note">Date d'échéance (facultatif)</label><input id="x" type="date" value="${esc(it.x||"")}"><label class="note">Se répète</label><select id="xr">${xrOpts(it.xr)}</select>${XRN}
     <label class="chk"><input id="ug" type="checkbox"${it.u?" checked":""}> Afficher dans le mode urgence</label>
-    <div class="row"><button id="ok">Enregistrer</button><button class="sec" id="dup">Dupliquer</button>${it.x?'<button class="sec" id="ic">Ajouter au calendrier</button>':""}</div>`;
+    ${formExtra(it)}${histHtml(it)}
+    <div class="row" style="margin-top:14px"><button id="ok">Enregistrer</button><button class="sec" id="dup">Dupliquer</button>${prefs.fShare?'<button class="sec" id="shr">Partager</button>':""}${it.x?'<button class="sec" id="ic">Ajouter au calendrier</button>':""}</div>`;
     $("#bk3").onclick=()=>{view="list";render()};
-    $("#ok").onclick=async()=>{const t=$("#t").value.trim(),v=$("#v").value;if(!t||!v)return;Object.assign(it,{c:$("#c").value,t,v,x:$("#x").value||"",xr:$("#x").value?$("#xr").value:"",u:$("#ug").checked,m:Date.now()});await save();view="list";render()};
-    $("#dup").onclick=async()=>{items.push(Object.assign({},it,{id:crypto.randomUUID(),t:it.t+" (copie)",d:Date.now(),m:Date.now(),f:false}));await save();view="list";render()};
+    $("#ok").onclick=async()=>{const t=$("#t").value.trim(),v=$("#v").value;if(!t||!v)return;const ex=readExtra();
+      if(prefs.fHist&&(it.v!==v||(ex.fl&&JSON.stringify(ex.fl)!==JSON.stringify(it.fl||[]))))it.h=[{t:Date.now(),v:it.v,fl:it.fl||[]}].concat(it.h||[]).slice(0,5);
+      Object.assign(it,{c:$("#c").value,t,v,x:$("#x").value||"",xr:$("#x").value?$("#xr").value:"",u:$("#ug").checked,m:Date.now()},ex);
+      try{await commitAtt(it)}catch(e){}await save();view="list";render()};
+    bindExtra(it);
+    app.querySelectorAll("[data-hr]").forEach(b=>b.onclick=()=>{const h=it.h[+b.dataset.hr];$("#v").value=h.v;tmpFl=(h.fl||[]).map(f=>({k:f.k,v:f.v}));redrawFl()});
+    if($("#shr"))$("#shr").onclick=()=>{shareId=it.id;view="share";render()};
+    $("#dup").onclick=async()=>{items.push(Object.assign({},it,{id:crypto.randomUUID(),t:it.t+" (copie)",d:Date.now(),m:Date.now(),f:false,at:[],h:[]}));await save();view="list";render()};
     if($("#ic"))$("#ic").onclick=()=>dl("echeance.ics","text/calendar",ics([it]));
+    return true;
+  }
+  if(view==="att"){
+    const it=items.find(x=>x.id===attId)||trash.find(x=>x.id===attId);if(!it){view="list";return false}
+    app.innerHTML=`<button class="sec sm" id="bk3">‹ Retour</button><h1 style="margin-top:14px">${esc(it.t)}</h1><p>Pièces jointes, chiffrées sur ce téléphone.</p><div id="atv"><p class="note">Déchiffrement…</p></div>`;
+    $("#bk3").onclick=()=>{view="list";render()};
+    (async()=>{let h="";
+      for(const a of it.at||[]){
+        try{const buf=await attGet(a.id),u=URL.createObjectURL(new Blob([buf],{type:a.t}));attUrls.push(u);
+          h+=`<div class="ent" style="margin-bottom:12px">${a.t.startsWith("image/")?`<img src="${u}" alt="${esc(a.n)}" style="max-width:100%;border-radius:12px;display:block;margin-bottom:10px">`:""}<div class="row"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(a.n)}</span><a href="${u}" ${a.t.startsWith("image/")?"":'target="_blank" rel="noopener" '}download="${esc(a.n)}" style="padding:8px 12px;border:1.5px solid var(--line);border-radius:12px;color:var(--ink);text-decoration:none">${a.t.startsWith("image/")?"Télécharger":"Ouvrir"}</a></div></div>`}
+        catch(e){h+=`<div class="ent" style="margin-bottom:12px">${esc(a.n)} : fichier introuvable sur ce téléphone.</div>`}
+      }
+      if($("#atv"))$("#atv").innerHTML=h||"<p>Aucune pièce jointe.</p>";
+    })();
+    return true;
+  }
+  if(view==="share"){
+    const it=items.find(x=>x.id===shareId);if(!it){view="list";return false}
+    app.innerHTML=`<button class="sec sm" id="bk3">‹ Retour</button><h1 style="margin-top:14px">Partager</h1><p>Crée un texte chiffré à envoyer à un proche. Donne-lui le mot de passe de vive voix, jamais dans le même message.</p>
+    <div class="ent" style="margin-bottom:12px"><b>${esc(it.t)}</b><div class="note">${esc(it.c)}</div></div>
+    <input id="sp" type="text" autocomplete="off" placeholder="Mot de passe de partage (8 caractères min.)">
+    <div class="row" style="margin-bottom:12px"><button class="sec sm" id="sg2">Générer un mot de passe</button></div>
+    <div class="err" id="err" role="alert"></div><button id="sk">Créer le texte chiffré</button>
+    <textarea id="so" readonly placeholder="Le texte chiffré apparaîtra ici" style="margin-top:12px"></textarea><div class="row"><button class="sec" id="sc">Copier</button></div>`;
+    $("#bk3").onclick=()=>{view="edit";editId=it.id;render()};
+    $("#sg2").onclick=()=>{const A="abcdefghijkmnpqrstuvwxyz23456789";let o="";while(o.length<12){const b=rnd(1)[0];if(b<224)o+=A[b%32]}$("#sp").value=o.slice(0,4)+"-"+o.slice(4,8)+"-"+o.slice(8)};
+    $("#sk").onclick=async()=>{
+      const p=$("#sp").value;if(p.length<8){$("#err").textContent="8 caractères minimum.";return}
+      $("#err").textContent="Chiffrement en cours…";
+      const s0=rnd(16),iv=rnd(12),k=await derive(p,s0,ITP);
+      const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},k,enc.encode(JSON.stringify({c:it.c,t:it.t,v:it.v,fl:it.fl||[],tg:it.tg||[]})));
+      $("#so").value="COFFRE1:"+b64(s0)+"."+b64(iv)+"."+b64(ct);$("#err").textContent="";addLog({k:"share",x:it.t});await save();
+    };
+    $("#sc").onclick=async()=>{try{await navigator.clipboard.writeText($("#so").value);$("#sc").textContent="Copié"}catch(e){$("#so").select()}};
+    return true;
+  }
+  if(view==="recv"){
+    app.innerHTML=`<button class="sec sm" id="bk3">‹ Réglages</button><h1 style="margin-top:14px">Recevoir un partage</h1><p>Colle le texte chiffré reçu et entre le mot de passe donné par ton proche.</p>
+    <textarea id="ri" placeholder="COFFRE1:…"></textarea><input id="rp" type="password" autocomplete="off" placeholder="Mot de passe de partage">
+    <select id="c">${cats.map(c=>`<option>${esc(c)}</option>`).join("")}</select>
+    <div class="err" id="err" role="alert"></div><button id="ok">Ajouter à mon coffre</button>`;
+    $("#bk3").onclick=()=>{view="set";render()};
+    $("#ok").onclick=async()=>{
+      const m=$("#ri").value.trim().match(/^COFFRE1:([^.]+)\.([^.]+)\.(.+)$/);
+      if(!m){$("#err").textContent="Ce texte n'est pas un partage valide.";return}
+      $("#err").textContent="Déchiffrement…";
+      try{
+        const k=await derive($("#rp").value,ub(m[1]),ITP),pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:ub(m[2])},k,ub(m[3])),o=JSON.parse(dec.decode(pt));
+        items.push({id:crypto.randomUUID(),c:$("#c").value,t:o.t,v:o.v,fl:o.fl||[],tg:o.tg||[],d:Date.now(),m:Date.now(),x:""});
+        await save();cat=$("#c").value;view="list";render();
+      }catch(e){$("#err").textContent="Mot de passe incorrect ou texte abîmé."}
+    };
+    return true;
+  }
+  if(view==="csv"){
+    app.innerHTML=`<button class="sec sm" id="bk3">‹ Réglages</button><h1 style="margin-top:14px">Importer un CSV</h1><p>Depuis un tableur ou un autre gestionnaire. Les mots de passe importés seront visibles dans le coffre une fois ouvert.</p>
+    <input id="cfile" type="file" accept=".csv,.txt,text/csv,text/plain"><textarea id="ct" placeholder="Nom;Valeur" style="min-height:120px"></textarea>
+    <button class="sec" id="can">Analyser</button><div id="cm" style="margin-top:12px"></div>`;
+    $("#bk3").onclick=()=>{view="set";render()};
+    $("#cfile").onchange=async()=>{const f=$("#cfile").files[0];if(f)$("#ct").value=await f.text()};
+    $("#can").onclick=()=>{
+      const rows=parseCSV($("#ct").value);
+      if(rows.length<2){$("#cm").innerHTML='<p class="err">Il faut des en-têtes sur la première ligne et au moins une ligne de données.</p>';return}
+      const H=rows[0],opt=n=>H.map((h,k)=>`<option value="${k}"${k===n?" selected":""}>${esc(h||"Colonne "+(k+1))}</option>`).join("");
+      $("#cm").innerHTML=`<p>${rows.length-1} ligne(s) trouvée(s).</p><label class="note">Colonne du nom</label><select id="cn">${opt(0)}</select><label class="note">Colonne de la valeur</label><select id="cv">${opt(Math.min(1,H.length-1))}</select><label class="note">Rubrique</label><select id="cc">${cats.map(c=>`<option>${esc(c)}</option>`).join("")}</select>${prefs.fFields?'<label class="chk"><input id="cx2" type="checkbox"> Ajouter les autres colonnes comme champs supplémentaires</label>':""}<div class="err" id="err" role="alert"></div><button id="ci">Importer</button>`;
+      $("#ci").onclick=async()=>{
+        const n=+$("#cn").value,v=+$("#cv").value;let c=0;
+        rows.slice(1).forEach(r=>{
+          const t=(r[n]||"").trim(),val=(r[v]||"").trim();if(!t||!val)return;
+          const fl=$("#cx2")&&$("#cx2").checked?H.map((h,k)=>({k:h,v:(r[k]||"").trim()})).filter((f,k)=>k!==n&&k!==v&&f.k&&f.v):[];
+          items.push(Object.assign({id:crypto.randomUUID(),c:$("#cc").value,t,v:val,d:Date.now(),m:Date.now(),x:""},fl.length?{fl}:{}));c++;
+        });
+        if(!c){$("#err").textContent="Aucune ligne valide.";return}
+        await save();cat=$("#cc").value;view="list";render();
+      };
+    };
     return true;
   }
   if(view==="gen"){
@@ -366,8 +567,8 @@ function xview(app){
     ${trash.length?trash.map(i=>`<div class="ent" style="margin-bottom:12px"><div class="eh"><span class="badge">${ci(i.c)}</span><div style="flex:1"><b>${esc(i.t)}</b><br><small class="note">${esc(i.c)} · supprimée le ${new Date(i.dt).toLocaleDateString("fr-FR")}</small></div></div><div class="row" style="margin-top:10px"><button class="sec sm" data-rs="${i.id}">Restaurer</button><button class="bad sm" data-pd="${i.id}">Supprimer pour de bon</button></div></div>`).join("")+`<button class="bad" id="et">Vider la corbeille</button>`:"<p>La corbeille est vide.</p>"}`;
     toSet();
     app.querySelectorAll("[data-rs]").forEach(b=>b.onclick=async()=>{const it=trash.find(x=>x.id===b.dataset.rs);delete it.dt;if(!cats.includes(it.c))cats.push(it.c);items.push(it);trash=trash.filter(x=>x!==it);await save();render()});
-    app.querySelectorAll("[data-pd]").forEach(b=>twoTap(b,"Supprimer pour de bon",async()=>{trash=trash.filter(x=>x.id!==b.dataset.pd);await save();render()}));
-    if($("#et"))twoTap($("#et"),"Vider la corbeille",async()=>{trash=[];await save();render()});
+    app.querySelectorAll("[data-pd]").forEach(b=>twoTap(b,"Supprimer pour de bon",async()=>{const g=trash.find(x=>x.id===b.dataset.pd);trash=trash.filter(x=>x!==g);for(const a of (g.at||[]))await attDel(a.id);await save();render()}));
+    if($("#et"))twoTap($("#et"),"Vider la corbeille",async()=>{const all=trash;trash=[];for(const g of all)for(const a of (g.at||[]))await attDel(a.id);await save();render()});
     return true;
   }
   if(view==="bulk"){
@@ -416,18 +617,43 @@ function xview(app){
     return true;
   }
   if(view==="stats"){
-    const cnt=c=>items.filter(i=>i.c===c).length,mx=Math.max(1,...cats.map(cnt)),old=items.filter(i=>i.d).sort((a,b)=>a.d-b.d)[0];
+    const t0=Date.now(),exp=items.filter(i=>i.x&&new Date(i.x+"T23:59:59")<t0).length;
+    const soon=items.filter(i=>i.x&&new Date(i.x+"T23:59:59")>=t0&&new Date(i.x)-t0<90*864e5).sort((a,b)=>a.x<b.x?-1:1);
+    const todo=items.filter(i=>i.v==="À compléter").length,sus=log.filter(l=>l.s&&!l.a).length,unv=devs.filter(d=>d.u).length;
+    const bkd=prefs.bk?Math.floor((t0-prefs.bk)/864e5):null,dm={};
+    items.forEach(i=>{const k=String(i.v||"").trim().toLowerCase();if(k.length>3&&k!=="à compléter")(dm[k]=dm[k]||[]).push(i)});
+    const dups=Object.values(dm).filter(a=>a.length>1).length;
+    const ck=(ok,txt,go,lab)=>`<div class="ent" style="margin-bottom:8px"><div class="row" style="justify-content:space-between;flex-wrap:nowrap"><span style="flex:1;min-width:0"><b style="color:${ok?"var(--ink)":"var(--brass)"}">${ok?"✓":"!"}</b> ${txt}</span>${!ok&&go?`<button class="sec sm" data-go="${go}">${lab}</button>`:""}</div></div>`;
+    const pts=[bkd!==null&&bkd<=30,!exp,!todo,!dups,!sus,!unv,!pinOn()],score=Math.round(pts.filter(Boolean).length/pts.length*100);
     const box=(n,l)=>`<div class="ent"><b style="font-size:1.6em">${n}</b><br><small class="note">${l}</small></div>`;
-    app.innerHTML=`${back("Réglages")}<h1 style="margin-top:14px">Statistiques</h1>
-    <div class="grid">${box(items.length,"informations")}${box(items.filter(i=>i.f).length,"favoris")}${box(items.filter(i=>i.u).length,"en mode urgence")}${box(items.filter(i=>i.x).length,"avec échéance")}${box(items.filter(i=>i.v==="À compléter").length,"à compléter")}${box(trash.length,"dans la corbeille")}</div>
-    <div class="sect">Par rubrique</div>${cats.map(c=>`<div style="margin-bottom:12px"><div class="row" style="justify-content:space-between"><span>${esc(c)}</span><b>${cnt(c)}</b></div><div class="meter"><i style="width:${cnt(c)/mx*100}%;background:var(--brass)"></i></div></div>`).join("")}
-    ${old?`<p class="note">Première information ajoutée le ${new Date(old.d).toLocaleDateString("fr-FR")}.</p>`:""}`;
-    toSet();return true;
+    app.innerHTML=`${back("Réglages")}<h1 style="margin-top:14px">Bilan du coffre</h1>
+    <div class="ent" style="margin-bottom:12px"><b style="font-size:1.6em">${score} %</b> <small class="note">de points au vert</small><div class="meter" style="margin:8px 0 0"><i style="width:${score}%;background:var(--brass)"></i></div></div>
+    ${ck(bkd!==null&&bkd<=30,bkd===null?"Aucune sauvegarde faite":bkd<=30?"Sauvegarde faite il y a "+bkd+" j":"Dernière sauvegarde il y a "+bkd+" j","backup","Sauvegarder")}
+    ${ck(!exp,exp?exp+" échéance"+(exp>1?"s":"")+" dépassée"+(exp>1?"s":""):"Aucune échéance dépassée","aud","Voir")}
+    ${ck(!todo,todo?todo+" information"+(todo>1?"s":"")+" à compléter":"Toutes les informations sont remplies","aud","Voir")}
+    ${ck(!dups,dups?dups+" valeur"+(dups>1?"s":"")+" en double":"Aucune valeur en double","aud","Voir")}
+    ${ck(!sus,sus?sus+" événement"+(sus>1?"s":"")+" de sécurité à vérifier":"Rien d'inhabituel dans le journal","log","Ouvrir")}
+    ${ck(!unv,unv?unv+" appareil"+(unv>1?"s":"")+" non vérifié"+(unv>1?"s":""):"Aucun appareil inconnu","log","Ouvrir")}
+    ${ck(!pinOn(),pinOn()?"Code court activé (moins sûr que le mot de passe)":"Code court désactivé","set","Régler")}
+    ${soon.length?`<div class="sect">Échéances des 90 prochains jours</div>`+soon.slice(0,6).map(i=>`<div class="ent" style="margin-bottom:6px;padding:10px 14px">${esc(i.t)} <small class="note">· ${fd(new Date(i.x+"T12:00:00"))}</small></div>`).join(""):""}
+    <div class="sect">Remplissage par rubrique</div>${cats.map(c=>{const a=items.filter(i=>i.c===c),f=a.filter(i=>i.v!=="À compléter").length;return `<div style="margin-bottom:12px"><div class="row" style="justify-content:space-between"><span>${esc(c)}</span><b>${a.length?f+" / "+a.length:"Vide"}</b></div><div class="meter"><i style="width:${a.length?f/a.length*100:0}%;background:var(--brass)"></i></div></div>`}).join("")}
+    <div class="sect">En chiffres</div><div class="grid">${box(items.length,"informations")}${box(items.filter(i=>i.f).length,"favoris")}${box(items.filter(i=>i.u).length,"en mode urgence")}${box(items.reduce((a,i)=>a+(i.at||[]).length,0),"pièces jointes")}${box(trash.length,"dans la corbeille")}${box(cats.length,"rubriques")}</div>`;
+    toSet();app.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{view=b.dataset.go;render()});return true;
   }
   if(view==="log"){
-    app.innerHTML=`${back("Réglages")}<h1 style="margin-top:14px">Journal d'activité</h1><p>Tes 10 dernières ouvertures du coffre. Les tentatives échouées sont signalées sur l'accueil à l'ouverture suivante.</p>
-    ${log.length?log.map(l=>`<div class="ent" style="margin-bottom:8px">${new Date(l.t).toLocaleString("fr-FR")}</div>`).join(""):"<p>Aucune ouverture enregistrée.</p>"}`;
-    toSet();return true;
+    const LB={unlock:l=>"Ouverture du coffre ("+({pw:"mot de passe",pin:"code court",rec:"code de récupération"}[l.m]||"mot de passe")+")",fail:l=>l.n+" tentative"+(l.n>1?"s":"")+" échouée"+(l.n>1?"s":"")+" avant une ouverture",newdev:l=>"Ouverture depuis un appareil inconnu : "+(l.x||""),pinoff:()=>"Code court désactivé après trop d'erreurs",recovery:()=>"Mot de passe réinitialisé avec le code de récupération",pwchg:()=>"Mot de passe changé",codegen:()=>"Nouveau code de récupération créé",backup:()=>"Sauvegarde chiffrée affichée",share:l=>"Partage créé"+(l.x?" : "+l.x:""),"pin+":()=>"Code court activé","pin-":()=>"Code court désactivé"};
+    const lab=l=>(LB[l.k]||LB.unlock)(l),when=l=>new Date(l.t).toLocaleString("fr-FR"),bad=log.filter(l=>l.s&&!l.a),cur=devId(),dd=t=>new Date(t).toLocaleDateString("fr-FR");
+    app.innerHTML=`${back("Réglages")}<h1 style="margin-top:14px">Journal de sécurité</h1>
+    <p>Il note les ouvertures et les actions sensibles, et repère ce qui sort de l'ordinaire : appareil inconnu, tentatives ratées, mot de passe réinitialisé. Il ne voit pas une attaque faite entièrement hors de ton téléphone.</p>
+    ${bad.length?`<div class="sect">À vérifier (${bad.length})</div>`+bad.map(l=>`<div class="ent" style="border-color:var(--bad);margin-bottom:8px"><b>${esc(lab(l))}</b><br><small class="note">${when(l)}</small><div class="row" style="margin-top:8px"><button class="sec sm" data-ack="${log.indexOf(l)}">C'était moi</button></div></div>`).join("")+`<button class="sec sm" id="ackall">Tout marquer comme vu</button>`:`<div class="ent" style="margin-bottom:8px">✓ Rien d'inhabituel à signaler.</div>`}
+    <div class="sect">Appareils connus</div>${devs.length?devs.map(d=>`<div class="ent" style="margin-bottom:8px"><b>${esc(d.n)}</b>${d.id===cur?" · cet appareil":""}<br><small class="note">Vu le ${dd(d.f)} pour la première fois, dernière ouverture le ${dd(d.l)} · ${d.u?"non vérifié":"vérifié"}</small>${d.u||d.id!==cur?`<div class="row" style="margin-top:8px">${d.u?`<button class="sec sm" data-trust="${d.id}">Faire confiance</button>`:""}${d.id!==cur?`<button class="bad sm" data-rmd="${d.id}">Retirer</button>`:""}</div>`:""}</div>`).join(""):"<p class=\"note\">Aucun appareil enregistré.</p>"}
+    <div class="sect">Historique</div>${log.length?log.slice(0,30).map(l=>`<div class="ent" style="margin-bottom:6px;padding:10px 14px">${esc(lab(l))}<br><small class="note">${when(l)}</small></div>`).join(""):"<p>Aucun événement.</p>"}`;
+    toSet();
+    app.querySelectorAll("[data-ack]").forEach(b=>b.onclick=async()=>{log[+b.dataset.ack].a=1;await save();render()});
+    if($("#ackall"))$("#ackall").onclick=async()=>{log.forEach(l=>{if(l.s)l.a=1});await save();render()};
+    app.querySelectorAll("[data-trust]").forEach(b=>b.onclick=async()=>{const d=devs.find(x=>x.id===b.dataset.trust);if(d)d.u=0;await save();render()});
+    app.querySelectorAll("[data-rmd]").forEach(b=>twoTap(b,"Retirer",async()=>{devs=devs.filter(x=>x.id!==b.dataset.rmd);await save();render()}));
+    return true;
   }
   if(view==="set"){
     const S=(k,l,o)=>`<div class="pr"><label class="note">${l}</label><select data-pref="${k}">${o.map(([v,t])=>`<option value="${v}"${String(prefs[k])===String(v)?" selected":""}>${t}</option>`).join("")}</select></div>`;
@@ -436,6 +662,7 @@ function xview(app){
     const catRows=cats.map((c,k)=>{const n=items.filter(i=>i.c===c).length;
       if(renC===c)return `<div class="row" style="margin-bottom:8px"><input id="rni" value="${esc(c)}" maxlength="24" style="flex:1;margin:0"><button id="rok">OK</button></div>`;
       return `<div class="row" style="margin-bottom:8px"><span style="flex:1;min-width:90px">${esc(c)} <small class="note">(${n})</small></span><button class="sec sm" data-up="${k}" aria-label="Monter">↑</button><button class="sec sm" data-dn="${k}" aria-label="Descendre">↓</button><button class="sec sm" data-rn="${esc(c)}">Renommer</button>${n||cats.length<2?"":`<button class="bad sm" data-dc="${esc(c)}">Suppr.</button>`}</div>`}).join("");
+    const FNG=S("fFields","Champs multiples par information",YN)+S("fAtt","Pièces jointes chiffrées",YN)+S("fHist","Historique des modifications",YN)+S("fLinks","Liens entre informations",YN)+S("fTags","Étiquettes",YN)+S("fShare","Partage d'une information",YN)+S("fCsv","Import CSV",YN)+S("fTrip","Mode voyage",YN)+(prefs.fTrip?`<div class="sect">Rubriques visibles en mode voyage</div>${cats.map(c=>`<label class="chk"><input type="checkbox" data-tc="${esc(c)}"${(prefs.trip||[]).includes(c)?" checked":""}> ${esc(c)}</label>`).join("")}<p class="note">Les informations marquées « urgence » restent visibles. Rien n'est supprimé : tout revient en quittant le mode.</p>`:"");
     app.innerHTML=`<h1>Réglages</h1>
     ${G("a","Affichage",
       S("theme","Thème",[["auto","Automatique"],["light","Clair"],["dark","Sombre"]])+
@@ -452,35 +679,38 @@ function xview(app){
       S("lock","Verrouillage automatique",[[30,"30 secondes"],[60,"1 minute"],[120,"2 minutes"],[300,"5 minutes"],[900,"15 minutes"]])+
       S("leave","Verrouiller en quittant l'appli",YN)+
       S("clip","Vider le presse-papiers après une copie",[[15,"15 secondes"],[30,"30 secondes"],[60,"1 minute"],[0,"Jamais"]])+
+      S("clipLock","Vider le presse-papiers au verrouillage",YN)+
       S("reveal","Durée d'affichage d'une valeur masquée",[[5,"5 secondes"],[10,"10 secondes"],[30,"30 secondes"],[60,"1 minute"]])+`<div class="sect">Code court</div>`+(pinOn()?`<div class="mnu"><button class="mi" id="pind">Code court activé · Désactiver</button></div>`:`<div class="row" style="margin-top:6px"><input id="pn" type="password" inputmode="numeric" maxlength="10" placeholder="6 à 10 chiffres" style="flex:1;margin:0"><button id="pine">Activer</button></div><p class="note" id="pinM" style="margin-top:6px">Plus rapide, mais moins sûr que le mot de passe. Désactivé automatiquement après 5 erreurs.</p>`))}
     ${G("c","Mes rubriques",catRows+`<div class="row" style="margin-top:6px"><input id="nc2" placeholder="Nouvelle rubrique" maxlength="24" style="flex:1;margin:0"><button id="ac">Ajouter</button></div><p class="note" style="margin-top:6px">Une rubrique ne peut être supprimée que si elle est vide.</p>`)}
-    ${G("e","Données",`<div class="mnu"><button class="mi" data-go="backup"><span>Sauvegarde<small class="note" style="display:block;font-weight:400;margin-top:2px">Copie chiffrée de ton coffre, pour le retrouver si tu perds ou changes de téléphone · dernière : ${lb}</small></span></button><button class="mi" data-go="trash">Corbeille (${trash.length})</button><button class="mi" data-go="bulk">Ajout en masse</button><button class="mi" id="tpl">Ajouter des modèles à compléter</button><button class="mi" id="icall">Échéances vers le calendrier</button></div>`)}
-    ${G("f","Suivi",`<div class="mnu"><button class="mi" data-go="aud">Contrôle du coffre</button><button class="mi" data-go="stats">Statistiques</button><button class="mi" data-go="log">Journal d'activité</button><button class="mi" data-go="gen">Générateur de mot de passe</button></div>`)}
+    ${G("e","Données",`<div class="mnu"><button class="mi" data-go="backup"><span>Sauvegarde<small class="note" style="display:block;font-weight:400;margin-top:2px">Copie chiffrée de ton coffre, pour le retrouver si tu perds ou changes de téléphone · dernière : ${lb}</small></span></button><button class="mi" data-go="trash">Corbeille (${trash.length})</button><button class="mi" data-go="bulk">Ajout en masse</button><button class="mi" id="tpl"><span>Pré-remplir mon coffre<small class="note" style="display:block;font-weight:400;margin-top:2px">Crée des lignes vides (Nom complet, Date de naissance, Numéro de sécu…) que tu remplis ensuite une à une.</small></span></button><button class="mi" id="icall">Échéances vers le calendrier</button>${prefs.fCsv?'<button class="mi" data-go="csv">Importer un fichier CSV</button>':""}${prefs.fShare?'<button class="mi" data-go="recv">Recevoir un partage</button>':""}</div>`)}
+    ${G("f","Suivi",`<div class="mnu"><button class="mi" data-go="aud">Contrôle du coffre</button><button class="mi" data-go="stats">Bilan du coffre</button><button class="mi" data-go="log">Journal de sécurité</button><button class="mi" data-go="gen">Générateur de mot de passe</button></div>`)}
     ${G("g","Compte et appli",S("home","Page de démarrage",[["list","Coffre"],["ech","Calendrier"]])+S("banner","Bandeau de rappels sur l'accueil",YN)+S("warnE","Prévenir des échéances",[[7,"7 jours avant"],[15,"15 jours avant"],[30,"30 jours avant"],[60,"60 jours avant"],[90,"90 jours avant"]])+S("warnB","Prévenir des dates annuelles",[[3,"3 jours avant"],[7,"7 jours avant"],[14,"14 jours avant"],[30,"30 jours avant"]])+S("rh","Heure du rappel (calendrier)",[[8,"8 h"],[9,"9 h"],[12,"12 h"],[18,"18 h"]])+S("rv","Rappel aussi la veille",YN)+S("dfmt","Format des dates",[["short","14/03/2026"],["long","14 mars 2026"]])+`<div class="sect">Compte</div><div class="mnu"><button class="mi" data-go="sec">Mot de passe et code de récupération</button><button class="mi" id="upd">Mettre à jour l'appli</button><button class="mi" id="rsr" style="color:var(--bad)">Réinitialiser les réglages</button></div>`)}
-    <p class="note" style="text-align:center;margin-top:24px">Version 16</p>`;
+    ${G("h","Fonctions",FNG)}
+    <p class="note" style="text-align:center;margin-top:24px">Version 17</p>`;
     app.querySelectorAll("details.grp").forEach(d=>d.addEventListener("toggle",()=>{sopen[d.dataset.k]=d.open}));
-    app.querySelectorAll("[data-pref]").forEach(e=>e.onchange=()=>{const k=e.dataset.pref;prefs[k]=isNaN(e.value)?e.value:Number(e.value);savePrefs();bump()});
+    app.querySelectorAll("[data-pref]").forEach(e=>e.onchange=()=>{const k=e.dataset.pref;prefs[k]=isNaN(e.value)?e.value:Number(e.value);savePrefs();bump();if(k==="fTrip")render()});
     app.querySelectorAll("[data-pt]").forEach(e=>e.oninput=()=>{prefs[e.dataset.pt]=e.value;savePrefs()});
     app.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{view=b.dataset.go;render()});
     app.querySelectorAll("[data-dc]").forEach(b=>b.onclick=async()=>{cats=cats.filter(c=>c!==b.dataset.dc);await save();render()});
     app.querySelectorAll("[data-up],[data-dn]").forEach(b=>b.onclick=async()=>{const k=+(b.dataset.up??b.dataset.dn),j=b.dataset.up!==undefined?k-1:k+1;if(j<0||j>=cats.length)return;[cats[k],cats[j]]=[cats[j],cats[k]];await save();render()});
     app.querySelectorAll("[data-rn]").forEach(b=>b.onclick=()=>{renC=b.dataset.rn;render()});
     if($("#rni")){$("#rni").focus();$("#rok").onclick=async()=>{const n=$("#rni").value.trim(),k=cats.indexOf(renC);if(!n||(cats.includes(n)&&n!==renC))return;cats[k]=n;items.concat(trash).forEach(i=>{if(i.c===renC)i.c=n});renC=null;await save();render()}}
+    app.querySelectorAll("[data-tc]").forEach(e=>e.onchange=()=>{const c=e.dataset.tc,a=(prefs.trip||[]).filter(x=>x!==c);prefs.trip=e.checked?a.concat(c):a;savePrefs()});
     $("#icall").onclick=()=>{const l=items.filter(i=>i.x);if(!l.length){$("#icall").textContent="Aucune échéance";return}dl("echeances.ics","text/calendar",ics(l))};
     $("#upd").onclick=async()=>{try{const g=await navigator.serviceWorker.getRegistrations();await Promise.all(g.map(x=>x.unregister()));const k=await caches.keys();await Promise.all(k.map(x=>caches.delete(x)))}catch(e){}location.reload()};
-    if($("#pine"))$("#pine").onclick=pinEnable;if($("#pind"))$("#pind").onclick=()=>{try{localStorage.removeItem(PK)}catch(e){}render()};
+    if($("#pine"))$("#pine").onclick=pinEnable;if($("#pind"))$("#pind").onclick=async()=>{try{localStorage.removeItem(PK)}catch(e){}addLog({k:"pin-"});await save();render()};
     $("#ac").onclick=async()=>{const n=$("#nc2").value.trim();if(!n||cats.includes(n))return;cats.push(n);await save();render()};
-    twoTap($("#tpl"),"Ajouter des modèles à compléter",async()=>{cats.forEach(c=>(SUG[c]||[]).forEach(t=>{if(!items.some(i=>i.c===c&&i.t===t))items.push({id:crypto.randomUUID(),c,t,v:"À compléter",d:Date.now(),m:Date.now(),x:""})}));await save();cat="Tous";q="À compléter";view="list";render()});
+    twoTap($("#tpl"),"Pré-remplir mon coffre",async()=>{cats.forEach(c=>(SUG[c]||[]).forEach(t=>{if(!items.some(i=>i.c===c&&i.t===t))items.push({id:crypto.randomUUID(),c,t,v:"À compléter",d:Date.now(),m:Date.now(),x:""})}));await save();cat="Tous";q="À compléter";view="list";render()});
     twoTap($("#rsr"),"Réinitialiser les réglages",()=>{prefs=Object.assign({},PD,{bk:prefs.bk});savePrefs();render()});
     return true;
   }
   return false;
 }
-function render(){if(key&&!homed){homed=true;if(prefs.home==="ech")view="ech"}if(key&&rollX())save();const y=window.scrollY,same=view===lastView&&cat===lastCat;_render();addEyes();addMeters();addNav();lastView=view;lastCat=cat;if(same){try{window.scrollTo(0,y)}catch(e){}}}
+function render(){if(key&&!homed){homed=true;if(prefs.home==="ech")view="ech"}if(key&&rollX())save();if(key&&!cleaned){cleaned=true;if(hasDB())attClean()}const y=window.scrollY,same=view===lastView&&cat===lastCat;if(lastView==="att"&&view!=="att"){attUrls.forEach(u=>URL.revokeObjectURL(u));attUrls=[]}_render();addEyes();addMeters();addGen();addNav();lastView=view;lastCat=cat;if(same){try{window.scrollTo(0,y)}catch(e){}}if(hl){const el=document.getElementById("e-"+hl);if(el)el.scrollIntoView({block:"center"});hl=null}}
 function addNav(){
   let n=document.getElementById("nav");
   const show=key&&["list","add","backup","sec",...XV].includes(view);
-  const act={backup:"set",gen:"set",trash:"set",bulk:"set",stats:"set",log:"set",aud:"set",edit:"list",urg:"list"}[view]||view;
+  const act={backup:"set",gen:"set",trash:"set",bulk:"set",stats:"set",log:"set",aud:"set",edit:"list",urg:"list",att:"list",share:"list",recv:"set",csv:"set"}[view]||view;
   document.body.classList.toggle("hasnav",!!show);
   if(!show){if(n)n.remove();return}
   $("#app").insertAdjacentHTML("afterbegin",`<header class="bar"><span class="brand">${MINI}${esc(prefs.name||"Mon coffre")}</span><button class="ico" id="lk" aria-label="Verrouiller">${LOCKI}</button></header>`);
@@ -521,7 +751,7 @@ function _render(){
       e.textContent="Vérification…";
       try{
         const r=await openBlob(load(),normCode($("#rc").value),"rc");
-        dek=r.raw;key=r.k;items=r.items;meta=r.meta;
+        dek=r.raw;key=r.k;items=r.items;meta=r.meta;noteUnlock("rec");addLog({k:"recovery",s:1});
         meta.pw=await wrap(n1,ITP,dek);
         pendingCode=await rotateCode();
         view="reccode";bump();render();
@@ -557,11 +787,11 @@ function _render(){
       if(n1!==$("#n2").value){e.textContent="Les deux mots de passe sont différents.";return}
       e.textContent="Vérification…";
       try{await unwrap($("#o").value,ITP,meta.pw)}catch(x){e.textContent="Mot de passe actuel incorrect.";return}
-      meta.pw=await wrap(n1,ITP,dek);await save();
+      meta.pw=await wrap(n1,ITP,dek);addLog({k:"pwchg"});await save();
       ["#o","#n1","#n2"].forEach(q=>$(q).value="");
       e.style.color="var(--ink)";e.textContent="Mot de passe changé.";
     };
-    $("#nc").onclick=async()=>{pendingCode=await rotateCode();view="reccode";render()};
+    $("#nc").onclick=async()=>{addLog({k:"codegen"});pendingCode=await rotateCode();view="reccode";render()};
     return;
   }
   if(!key){
@@ -587,26 +817,28 @@ function _render(){
     <input id="t" placeholder="Nom (ex. Numéro de sécu)">
     <textarea id="v" placeholder="Valeur"></textarea>
     <label class="note">Date d'échéance (facultatif)</label><input id="x" type="date"><label class="note">Se répète</label><select id="xr">${xrOpts("")}</select>${XRN}
-    <div class="row"><button id="ok">Enregistrer</button><button class="sec" id="cx">Annuler</button></div>`;
+    ${formExtra({})}
+    <div class="row" style="margin-top:14px"><button id="ok">Enregistrer</button><button class="sec" id="cx">Annuler</button></div>`;
     const drawSug=()=>{
       const used=items.filter(i=>i.c===$("#c").value).map(i=>i.t);
       const l=(SUG[$("#c").value]||[]).filter(s=>!used.includes(s));
       $("#sg").innerHTML=l.length?l.map((s,n)=>`<button class="sec sm" data-n="${n}">${esc(s)}</button>`).join(""):'<span class="note">Toutes les suggestions sont déjà utilisées.</span>';
       $("#sg").querySelectorAll("button").forEach(b=>b.onclick=()=>{$("#t").value=l[b.dataset.n];$("#v").focus()});
     };
-    $("#c").onchange=drawSug;drawSug();
+    $("#c").onchange=drawSug;drawSug();bindExtra({});
     $("#cx").onclick=$("#bkt").onclick=()=>{view="list";render()};
     $("#ok").onclick=async()=>{
       const t=$("#t").value.trim(),v=$("#v").value;
       if(!t||!v)return;
-      items.push({id:crypto.randomUUID(),c:$("#c").value,t,v,d:Date.now(),m:Date.now(),x:$("#x").value||"",xr:$("#x").value?$("#xr").value:""});
-      await save();view="list";render();
+      const ni=Object.assign({id:crypto.randomUUID(),c:$("#c").value,t,v,d:Date.now(),m:Date.now(),x:$("#x").value||"",xr:$("#x").value?$("#xr").value:""},readExtra());
+      try{await commitAtt(ni)}catch(e){}
+      items.push(ni);await save();view="list";render();
     };
     return;
   }
   if(view==="backup"){
     app.innerHTML=`<button class="sec sm" id="bkt">‹ Réglages</button><h1 style="margin-top:14px">Sauvegarde</h1><div class="ent" style="margin-bottom:12px"><b>À quoi sert la sauvegarde ?</b><p class="note" style="margin:6px 0 0">Tout est stocké uniquement sur ce téléphone. La sauvegarde en est une copie chiffrée, illisible sans ton mot de passe maître : garde-la dans un endroit sûr (messagerie, cloud…). Si tu perds ou changes de téléphone, ou si les données du navigateur sont effacées, tu pourras tout retrouver en la restaurant.</p></div>
-    <p>La sauvegarde reste chiffrée : sans ton mot de passe maître, elle est illisible. Copie-la dans un endroit sûr. Restaurer ajoute les informations manquantes à ton coffre : rien n'est remplacé ni effacé.</p>
+    <p>La sauvegarde reste chiffrée : sans ton mot de passe maître, elle est illisible. Copie-la dans un endroit sûr. Restaurer ajoute les informations manquantes à ton coffre : rien n'est remplacé ni effacé. Les pièces jointes ne sont pas dans la sauvegarde texte : garde les originaux.</p>
     <button id="ex">Afficher la sauvegarde chiffrée</button>
     <textarea id="bl" placeholder="Sauvegarde chiffrée" style="margin-top:12px"></textarea>
     <input id="ip" type="password" autocomplete="off" placeholder="Mot de passe de la sauvegarde (pour restaurer)">
@@ -615,17 +847,17 @@ function _render(){
     <div class="err" id="err" role="alert"></div>
     <div class="row" style="margin-top:16px"><button class="sec" id="bk">Retour</button></div>`;
     $("#bk").onclick=()=>{view="list";render()};$("#bkt").onclick=()=>{view="set";render()};
-    $("#ex").onclick=async()=>{$("#bl").value=await seal();prefs.bk=Date.now();savePrefs()};
+    $("#ex").onclick=async()=>{addLog({k:"backup"});$("#bl").value=await seal();prefs.bk=Date.now();savePrefs();await save()};
     $("#cp").onclick=async()=>{try{await navigator.clipboard.writeText($("#bl").value)}catch(e){$("#bl").select()}};
     $("#df").onclick=async()=>{const x=await seal();$("#bl").value=x;dl("coffre-"+new Date().toISOString().slice(0,10)+".json","application/json",x);prefs.bk=Date.now();savePrefs()};
     $("#fi").onchange=async e=>{const f=e.target.files[0];if(f)$("#bl").value=(await f.text()).trim()};
     $("#im").onclick=async()=>{
       const pw=$("#ip").value;
       if(!pw){$("#err").textContent="Entre le mot de passe maître de cette sauvegarde.";return}
-      const kc=cats,kt=trash,kl=log,kb=bd;
+      const kc=cats,kt=trash,kl=log,kb=bd,kd=devs;
       try{
         const r=await openBlob($("#bl").value.trim(),pw,"pw");
-        const bc=cats,bt=trash,bb=bd;cats=kc;trash=kt;log=kl;bd=kb;bb.forEach(b=>{if(!bd.some(x=>x.id===b.id))bd.push(b)});
+        const bc=cats,bt=trash,bb=bd;cats=kc;trash=kt;log=kl;bd=kb;devs=kd;bb.forEach(b=>{if(!bd.some(x=>x.id===b.id))bd.push(b)});
         const ids=new Set(items.map(i=>i.id)),add=r.items.filter(i=>!ids.has(i.id));
         items.push(...add);
         bc.forEach(c=>{if(!cats.includes(c))cats.push(c)});
@@ -633,31 +865,31 @@ function _render(){
         await save();
         $("#err").style.color="var(--ink)";
         $("#err").textContent=add.length+" information"+(add.length>1?"s":"")+" ajoutée"+(add.length>1?"s":"")+". Rien n'a été remplacé.";
-      }catch(e){cats=kc;trash=kt;log=kl;bd=kb;$("#err").style.color="";$("#err").textContent="Restauration impossible : texte ou mot de passe incorrect."}
+      }catch(e){cats=kc;trash=kt;log=kl;bd=kb;devs=kd;$("#err").style.color="";$("#err").textContent="Restauration impossible : texte ou mot de passe incorrect."}
     };
     return;
   }
-  const cnt=c=>items.filter(i=>i.c===c).length;
+  const cnt=c=>IT().filter(i=>i.c===c).length;
   if(cat==="Tous"){
     app.innerHTML=`<h1>Mes rubriques</h1><p>${items.length?items.length+" information"+(items.length>1?"s":"")+" protégée"+(items.length>1?"s":"")+" sur ce téléphone.":"Ton coffre est vide. Touche + pour ajouter ta première information."}</p>
     <input id="q" type="search" placeholder="Rechercher dans le coffre" value="${esc(q)}" autocomplete="off"><div id="res"></div>`;
     const draw=()=>{
       const t=q.trim().toLowerCase(),box=$("#res");
-      if(t){const r=sortItems(items.filter(i=>(i.t+" "+i.v+" "+i.c).toLowerCase().includes(t)));box.innerHTML=r.length?r.map(entryCard).join(""):"<p>Aucun résultat.</p>"}
+      if(t){const r=sortItems(IT().filter(i=>(i.t+" "+i.v+" "+i.c+" "+extraText(i)).toLowerCase().includes(t)));box.innerHTML=r.length?r.map(entryCard).join(""):"<p>Aucun résultat.</p>"}
       else{
-        const soon=items.filter(i=>i.x&&dleft(i)<=60),fav=sortItems(items.filter(i=>i.f));
-        let h=extraTop();
+        const soon=IT().filter(i=>i.x&&dleft(i)<=60),fav=sortItems(IT().filter(i=>i.f));
+        let h=extraTop()+tripBanner()+tagBar();
         if(items.length&&(!prefs.bk||Date.now()-prefs.bk>2592e6))h+=`<div class="ent"><b>Pense à ta sauvegarde</b><p class="note" style="margin:4px 0 10px">${prefs.bk?"Ta dernière sauvegarde date de plus de 30 jours.":"Tu n'as encore fait aucune sauvegarde."}</p><button class="sm" data-go="backup">Sauvegarder maintenant</button></div>`;
         if(soon.length)h+=`<div class="ent"><b>Échéances à surveiller</b>${soon.map(i=>{const e=exp(i);return `<div class="note" style="margin-top:4px">${esc(i.t)} · <span style="color:${e.col}">${e.t}</span></div>`}).join("")}</div>`;
         if(fav.length)h+=`<div class="sect">Favoris</div>`+fav.map(entryCard).join("");
-        h+=recentHtml()+`<div class="sect">Rubriques</div><div class="grid${prefs.layout==="list"?" one":""}">${cats.map(c=>`<button class="tile" data-cat="${esc(c)}"><span class="badge">${ci(c)}</span><b>${esc(c)}</b><small>${cnt(c)} élément${cnt(c)>1?"s":""}</small></button>`).join("")}</div>`;
+        h+=recentHtml()+`<div class="sect">Rubriques</div><div class="grid${prefs.layout==="list"?" one":""}">${catsV().map(c=>`<button class="tile" data-cat="${esc(c)}"><span class="badge">${ci(c)}</span><b>${esc(c)}</b><small>${cnt(c)} élément${cnt(c)>1?"s":""}</small></button>`).join("")}</div>`;
         box.innerHTML=h;
       }
       bindEnt(box);
     };
     $("#q").oninput=e=>{q=e.target.value;draw()};draw();
   }else{
-    const list=sortItems(items.filter(i=>i.c===cat));
+    const list=sortItems(IT().filter(i=>i.c===cat));
     app.innerHTML=`<button class="sec sm" id="bk2">‹ Rubriques</button><h1 style="margin-top:14px">${esc(cat)}</h1><div id="res">${list.length?list.map(entryCard).join(""):"<p>Rien ici pour l'instant. Touche + pour ajouter une information.</p>"}</div>`;
     $("#bk2").onclick=()=>{cat="Tous";render()};
     bindEnt($("#res"));
@@ -681,7 +913,7 @@ async function unlock(){
     const dl=document.querySelector(".dial");if(dl){dl.classList.add("spin");await new Promise(z=>setTimeout(z,650))}
     fails=0;msg="";
     if(r.legacy){pendingCode=await setupKeys(pw,r.items);view="reccode"}
-    else{dek=r.raw;key=r.k;items=r.items;meta=r.meta;const f=getF();if(f.n)warnF=f;setF({});log.unshift({t:Date.now()});log=log.slice(0,10);await save()}
+    else{dek=r.raw;key=r.k;items=r.items;meta=r.meta;noteUnlock("pw");await save()}
     bump();render();
   }catch(x){
     fails++;e.textContent="Mot de passe incorrect.";
