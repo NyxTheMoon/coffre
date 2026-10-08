@@ -364,6 +364,24 @@ function noteUnlock(m){
   if(nd)addLog({k:"newdev",s:1,x:dv.n});
   setF({});fails=0;msg="";
 }
+const gfm=(a,b)=>{let p=0;for(let i=0;i<8;i++){if(b&1)p^=a;const h=a&128;a=(a<<1)&255;if(h)a^=27;b>>=1}return p};
+const gfi=a=>{let r=1,e=254;while(e){if(e&1)r=gfm(r,a);a=gfm(a,a);e>>=1}return r};
+function splitCode(code,n=3,k=2){
+  const sh=Array.from({length:n},(_,i)=>[i+1]);
+  for(const ch of code){const co=[ch.charCodeAt(0),...rnd(k-1)];sh.forEach(s=>{let y=0;for(let j=co.length-1;j>=0;j--)y=gfm(y,s[0])^co[j];s.push(y)})}
+  return sh.map(s=>s.map(b=>b.toString(16).padStart(2,"0")).join("").toUpperCase().match(/.{1,4}/g).join("-"));
+}
+function joinCode(parts){
+  const sh=parts.map(p=>{const h=p.replace(/[^0-9a-fA-F]/g,"");if(h.length<4||h.length%2)throw 0;return h.match(/../g).map(x=>parseInt(x,16))});
+  if(sh.length<2||new Set(sh.map(x=>x[0])).size<sh.length||sh.some(x=>x.length!==sh[0].length))throw 0;
+  const out=[];
+  for(let p=1;p<sh[0].length;p++){let v=0;sh.forEach((a,i)=>{let num=1,den=1;sh.forEach((b,j)=>{if(i!==j){num=gfm(num,b[0]);den=gfm(den,a[0]^b[0])}});v^=gfm(a[p],gfm(num,gfi(den)))});out.push(v)}
+  return String.fromCharCode(...out);
+}
+async function sendText(title,msg){
+  try{if(navigator.share){await navigator.share({title,text:msg});return}}catch(e){if(e&&e.name==="AbortError")return}
+  location.href="mailto:?subject="+encodeURIComponent(title)+"&body="+encodeURIComponent(msg);
+}
 function addGen(){
   [["#pw","#pw2"],["#n1","#n2"]].forEach(([a,c])=>{
     const i1=$(a),i2=$(c);if(!i1||!i2)return;
@@ -641,7 +659,7 @@ function xview(app){
     toSet();app.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{view=b.dataset.go;render()});return true;
   }
   if(view==="log"){
-    const LB={unlock:l=>"Ouverture du coffre ("+({pw:"mot de passe",pin:"code court",rec:"code de récupération"}[l.m]||"mot de passe")+")",fail:l=>l.n+" tentative"+(l.n>1?"s":"")+" échouée"+(l.n>1?"s":"")+" avant une ouverture",newdev:l=>"Ouverture depuis un appareil inconnu : "+(l.x||""),pinoff:()=>"Code court désactivé après trop d'erreurs",recovery:()=>"Mot de passe réinitialisé avec le code de récupération",pwchg:()=>"Mot de passe changé",codegen:()=>"Nouveau code de récupération créé",backup:()=>"Sauvegarde chiffrée affichée",share:l=>"Partage créé"+(l.x?" : "+l.x:""),"pin+":()=>"Code court activé","pin-":()=>"Code court désactivé"};
+    const LB={unlock:l=>"Ouverture du coffre ("+({pw:"mot de passe",pin:"code court",rec:"code de récupération"}[l.m]||"mot de passe")+")",fail:l=>l.n+" tentative"+(l.n>1?"s":"")+" échouée"+(l.n>1?"s":"")+" avant une ouverture",newdev:l=>"Ouverture depuis un appareil inconnu : "+(l.x||""),pinoff:()=>"Code court désactivé après trop d'erreurs",recovery:()=>"Mot de passe réinitialisé avec le code de récupération",pwchg:()=>"Mot de passe changé",codesent:l=>"Code de récupération "+(l.x==="parties"?"partagé en 3 parties":"envoyé"),codegen:()=>"Nouveau code de récupération créé",backup:()=>"Sauvegarde chiffrée affichée",share:l=>"Partage créé"+(l.x?" : "+l.x:""),"pin+":()=>"Code court activé","pin-":()=>"Code court désactivé"};
     const lab=l=>(LB[l.k]||LB.unlock)(l),when=l=>new Date(l.t).toLocaleString("fr-FR"),bad=log.filter(l=>l.s&&!l.a),cur=devId(),dd=t=>new Date(t).toLocaleDateString("fr-FR");
     app.innerHTML=`${back("Réglages")}<h1 style="margin-top:14px">Journal de sécurité</h1>
     <p>Il note les ouvertures et les actions sensibles, et repère ce qui sort de l'ordinaire : appareil inconnu, tentatives ratées, mot de passe réinitialisé. Il ne voit pas une attaque faite entièrement hors de ton téléphone.</p>
@@ -686,7 +704,7 @@ function xview(app){
     ${G("f","Suivi",`<div class="mnu"><button class="mi" data-go="aud">Contrôle du coffre</button><button class="mi" data-go="stats">Bilan du coffre</button><button class="mi" data-go="log">Journal de sécurité</button><button class="mi" data-go="gen">Générateur de mot de passe</button></div>`)}
     ${G("g","Compte et appli",S("home","Page de démarrage",[["list","Coffre"],["ech","Calendrier"]])+S("banner","Bandeau de rappels sur l'accueil",YN)+S("warnE","Prévenir des échéances",[[7,"7 jours avant"],[15,"15 jours avant"],[30,"30 jours avant"],[60,"60 jours avant"],[90,"90 jours avant"]])+S("warnB","Prévenir des dates annuelles",[[3,"3 jours avant"],[7,"7 jours avant"],[14,"14 jours avant"],[30,"30 jours avant"]])+S("rh","Heure du rappel (calendrier)",[[8,"8 h"],[9,"9 h"],[12,"12 h"],[18,"18 h"]])+S("rv","Rappel aussi la veille",YN)+S("dfmt","Format des dates",[["short","14/03/2026"],["long","14 mars 2026"]])+`<div class="sect">Compte</div><div class="mnu"><button class="mi" data-go="sec">Mot de passe et code de récupération</button><button class="mi" id="upd">Mettre à jour l'appli</button><button class="mi" id="rsr" style="color:var(--bad)">Réinitialiser les réglages</button></div>`)}
     ${G("h","Fonctions",FNG)}
-    <p class="note" style="text-align:center;margin-top:24px">Version 17</p>`;
+    <p class="note" style="text-align:center;margin-top:24px">Version 19</p>`;
     app.querySelectorAll("details.grp").forEach(d=>d.addEventListener("toggle",()=>{sopen[d.dataset.k]=d.open}));
     app.querySelectorAll("[data-pref]").forEach(e=>e.onchange=()=>{const k=e.dataset.pref;prefs[k]=isNaN(e.value)?e.value:Number(e.value);savePrefs();bump();if(k==="fTrip")render()});
     app.querySelectorAll("[data-pt]").forEach(e=>e.oninput=()=>{prefs[e.dataset.pt]=e.value;savePrefs()});
@@ -736,6 +754,9 @@ function _render(){
     app.innerHTML=`<h1>Mot de passe oublié</h1>
     <p>Entre ton code de récupération et choisis un nouveau mot de passe.</p>
     <input id="rc" autocomplete="off" autocapitalize="characters" placeholder="Code de récupération">
+    <details class="grp" style="margin-bottom:10px"><summary>J'ai des parties du code (2 sur 3)</summary>
+      <input id="sh1" autocomplete="off" placeholder="Première partie"><input id="sh2" autocomplete="off" placeholder="Deuxième partie">
+      <button class="sec sm" id="rb" type="button">Reconstituer le code</button><p class="note" id="rbm" style="margin-top:6px"></p></details>
     <input id="n1" type="password" autocomplete="off" placeholder="Nouveau mot de passe (12 caractères min.)">
     <input id="n2" type="password" autocomplete="off" placeholder="Confirme le nouveau mot de passe">
     <div class="err" id="err" role="alert"></div>
@@ -743,6 +764,7 @@ function _render(){
     <p class="note" style="margin-top:14px">Sans ton mot de passe ni ton code, les données ne peuvent pas être récupérées : c'est le prix d'un vrai chiffrement.</p>
     <div class="row" style="margin-top:14px"><button class="bad sm" id="wp2">J'ai tout perdu</button></div>`;
     $("#wp2").onclick=()=>{view="wipe";render()};
+    $("#rb").onclick=()=>{try{$("#rc").value=fmt(joinCode([$("#sh1").value,$("#sh2").value]));$("#rbm").textContent="Code reconstitué. Choisis maintenant ton nouveau mot de passe."}catch(e){$("#rbm").textContent="Parties invalides : vérifie que ce sont deux parties différentes, recopiées en entier."}};
     $("#bk").onclick=()=>{view="list";render()};
     $("#ok").onclick=async()=>{
       const e=$("#err"),n1=$("#n1").value;
@@ -763,8 +785,19 @@ function _render(){
     app.innerHTML=`<h1>Ton code de récupération</h1>
     <p>Écris ce code sur papier et garde-le hors du téléphone. Si tu oublies ton mot de passe, c'est le seul moyen de rouvrir le coffre. Il ne sera plus affiché ensuite.</p>
     <div class="entry" style="font:600 20px/1.7 ui-monospace,monospace;letter-spacing:.06em;text-align:center;word-break:break-all">${fmt(pendingCode)}</div>
-    <button id="ok">J'ai noté mon code</button>`;
+    <details class="grp" style="margin-top:14px"><summary>Garder une copie ailleurs (facultatif)</summary>
+      <p class="note">Le papier reste le plus sûr. Tu peux aussi t'envoyer le code, mais quiconque l'obtient avec les données de ton téléphone pourrait ouvrir ton coffre. Pour plus de sécurité, partage-le entre 3 proches : 2 parties suffisent pour le retrouver, une seule ne révèle rien.</p>
+      <div class="row"><button class="sec sm" id="snd">M'envoyer le code (e-mail, SMS…)</button><button class="sec sm" id="shm">Partager entre 3 proches</button></div>
+      <div id="shb" style="margin-top:10px"></div></details>
+    <button id="ok" style="margin-top:14px">J'ai noté mon code</button>`;
     $("#ok").onclick=()=>{pendingCode=null;view="list";bump();render()};
+    $("#snd").onclick=()=>{sendText("Code de récupération de mon coffre","Code de récupération de mon coffre : "+fmt(pendingCode));addLog({k:"codesent",x:"envoi"});save()};
+    $("#shm").onclick=async()=>{
+      const p=splitCode(pendingCode);
+      $("#shb").innerHTML=p.map((x,n)=>`<div class="entry" style="margin-bottom:8px"><b>Partie ${n+1} sur 3</b><div style="font:600 14px/1.6 ui-monospace,monospace;word-break:break-all;margin:6px 0">${x}</div><button class="sec sm" data-sp="${n}">Envoyer</button></div>`).join("");
+      $("#shb").querySelectorAll("[data-sp]").forEach(b=>b.onclick=()=>{const n=+b.dataset.sp;sendText("Partie "+(n+1)+" sur 3 du code de récupération","Partie "+(n+1)+" sur 3 du code de récupération de mon coffre. Garde-la sans la montrer : "+p[n])});
+      addLog({k:"codesent",x:"parties"});await save();
+    };
     return;
   }
   if(key&&view==="sec"){
